@@ -993,7 +993,7 @@ def main():
                     st.session_state['level2'],
                     term,
                     st.session_state['years'],
-                    limit=100,
+                    100,
                     lambda p, m: None
                 )
                 st.session_state['results'][term] = works
@@ -1154,6 +1154,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
