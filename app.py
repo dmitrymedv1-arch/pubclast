@@ -994,7 +994,7 @@ def main():
                     term,
                     st.session_state.years,
                     limit=100,
-                    lambda p, m: None
+                    progress_callback=lambda p, m: None
                 )
                 st.session_state.results[term] = works
             
@@ -1154,3 +1154,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
