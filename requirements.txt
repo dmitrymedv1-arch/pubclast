@@ -17,7 +17,7 @@ pytz
 python-dateutil
 typing-extensions
 SQLAlchemy
-tqdm=
+tqdm
 colorama
 urllib3
 certifi
@@ -29,3 +29,4 @@ frozenlist
 aiosignal
 async-timeout
 attrs
+
