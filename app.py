@@ -814,15 +814,15 @@ def main():
     
     # Инициализация состояния сессии
     if 'step' not in st.session_state:
-        st.session_state.step = 1
+        st.session_state['step'] = 1
     if 'results' not in st.session_state:
-        st.session_state.results = {}
+        st.session_state['results'] = {}
     if 'topic_counts' not in st.session_state:
-        st.session_state.topic_counts = {}
+        st.session_state['topic_counts'] = {}
     if 'level1_count' not in st.session_state:
-        st.session_state.level1_count = 0
+        st.session_state['level1_count'] = 0
     if 'level2_count' not in st.session_state:
-        st.session_state.level2_count = 0
+        st.session_state['level2_count'] = 0
     
     # ========================================================================
     # ШАГ 1: ВВОД ТЕРМИНОВ
@@ -909,12 +909,12 @@ def main():
                 elif not level3_text.strip():
                     st.error("❌ Please enter at least one Level 3 term")
                 else:
-                    # Сохраняем в сессию
-                    st.session_state.level1 = level1.strip()
-                    st.session_state.level2 = level2.strip() or None
-                    st.session_state.level3 = [t.strip() for t in level3_text.split('\n') if t.strip()]
-                    st.session_state.years = years
-                    st.session_state.step = 2
+                    # Сохраняем в сессию через словарь
+                    st.session_state['level1'] = level1.strip()
+                    st.session_state['level2'] = level2.strip() or None
+                    st.session_state['level3'] = [t.strip() for t in level3_text.split('\n') if t.strip()]
+                    st.session_state['years'] = years
+                    st.session_state['step'] = 2
                     st.rerun()
     
     # ========================================================================
@@ -951,63 +951,63 @@ def main():
         try:
             # Шаг 1: Level 1 count
             update_progress(0.1, "Getting Level 1 count...")
-            st.session_state.level1_count = get_total_count(
-                st.session_state.level1, None, st.session_state.years
+            st.session_state['level1_count'] = get_total_count(
+                st.session_state['level1'], None, st.session_state['years']
             )
             
             # Шаг 2: Level 2 count (if applicable)
-            if st.session_state.level2:
+            if st.session_state['level2']:
                 update_progress(0.2, "Getting Level 2 count...")
-                st.session_state.level2_count = get_total_count(
-                    st.session_state.level1, st.session_state.level2, st.session_state.years
+                st.session_state['level2_count'] = get_total_count(
+                    st.session_state['level1'], st.session_state['level2'], st.session_state['years']
                 )
             else:
-                st.session_state.level2_count = st.session_state.level1_count
+                st.session_state['level2_count'] = st.session_state['level1_count']
             
             # Шаг 3: Level 3 counts
             update_progress(0.3, "Analyzing Level 3 terms...")
-            st.session_state.topic_counts = get_topic_counts(
-                st.session_state.level1,
-                st.session_state.level2,
-                st.session_state.level3,
-                st.session_state.years,
+            st.session_state['topic_counts'] = get_topic_counts(
+                st.session_state['level1'],
+                st.session_state['level2'],
+                st.session_state['level3'],
+                st.session_state['years'],
                 lambda p, m: update_progress(0.3 + p*0.2, m)
             )
             
             # Шаг 4: Fetch top works for each level 3 term
             update_progress(0.5, "Fetching top papers...")
-            st.session_state.results = {}
+            st.session_state['results'] = {}
             
-            for i, term in enumerate(st.session_state.level3):
-                if st.session_state.topic_counts[term] == 0:
-                    st.session_state.results[term] = []
+            for i, term in enumerate(st.session_state['level3']):
+                if st.session_state['topic_counts'][term] == 0:
+                    st.session_state['results'][term] = []
                     continue
                 
                 update_progress(
-                    0.5 + (i / len(st.session_state.level3)) * 0.4,
+                    0.5 + (i / len(st.session_state['level3'])) * 0.4,
                     f"Fetching papers for: {term}"
                 )
                 
                 works = fetch_top_works(
-                    st.session_state.level1,
-                    st.session_state.level2,
+                    st.session_state['level1'],
+                    st.session_state['level2'],
                     term,
-                    st.session_state.years,
+                    st.session_state['years'],
                     limit=100,
-                    progress_callback=lambda p, m: None
+                    lambda p, m: None
                 )
-                st.session_state.results[term] = works
+                st.session_state['results'][term] = works
             
             update_progress(1.0, "✅ Analysis complete!")
             time.sleep(0.5)
             
-            st.session_state.step = 3
+            st.session_state['step'] = 3
             st.rerun()
             
         except Exception as e:
             st.error(f"❌ Error during analysis: {str(e)}")
             if st.button("← Back to Step 1"):
-                st.session_state.step = 1
+                st.session_state['step'] = 1
                 st.rerun()
     
     # ========================================================================
@@ -1154,4 +1154,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
