@@ -1,34 +1,13 @@
 streamlit
-requests
 pandas
 numpy
 plotly
-nltk
-aiohttp
+matplotlib
+requests
 tenacity
 ratelimit
-joblib
-reportlab
+pillow
 xlsxwriter
-Pillow
-networkx
 openpyxl
-pytz
-python-dateutil
-typing-extensions
-SQLAlchemy
-tqdm
-colorama
-urllib3
-certifi
-idna
-charset-normalizer
-multidict
-yarl
-frozenlist
-aiosignal
-async-timeout
-attrs
-TfidfVectorizer
 
 
