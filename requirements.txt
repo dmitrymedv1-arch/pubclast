@@ -29,5 +29,6 @@ frozenlist
 aiosignal
 async-timeout
 attrs
+TfidfVectorizer
 
 
