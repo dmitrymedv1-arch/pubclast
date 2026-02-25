@@ -36,9 +36,12 @@ from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_JUSTIFY
 from reportlab.platypus import Image
 import xlsxwriter
 from PIL import Image as PILImage
-from dataclasses import dataclass, field
-from enum import Enum
-import pickle
+import networkx as nx
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.cluster import AgglomerativeClustering
+from scipy.cluster.hierarchy import dendrogram, linkage
+import matplotlib.pyplot as plt
+from wordcloud import WordCloud
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -46,7 +49,7 @@ logger = logging.getLogger(__name__)
 
 # Настройки приложения
 st.set_page_config(
-    page_title="CTA Article Recommender Pro - Hierarchical Classification",
+    page_title="CTA Article Recommender Pro",
     page_icon="logo.jpg",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -297,62 +300,77 @@ st.markdown("""
         font-weight: 600;
     }
     
-    /* Новые стили для иерархической классификации */
-    .hierarchy-level {
-        background: linear-gradient(135deg, #f0f4f8 0%, #e6ecf5 100%);
-        border-radius: 10px;
-        padding: 15px;
-        margin-bottom: 15px;
-        border-left: 4px solid #9b59b6;
+    /* Новые стили для кластеризации и классификации */
+    .cluster-node {
+        background: linear-gradient(135deg, #6a11cb15 0%, #2575fc15 100%);
+        border-radius: 8px;
+        padding: 10px;
+        margin: 5px;
+        border-left: 3px solid #6a11cb;
+        font-size: 0.9rem;
     }
     
-    .classification-card {
-        background: linear-gradient(135deg, #f5f0fa 0%, #ede7f6 100%);
-        border-radius: 10px;
-        padding: 15px;
-        margin-bottom: 15px;
-        border-left: 4px solid #8e44ad;
-    }
-    
-    .tree-node {
-        font-family: monospace;
-        margin-left: 20px;
-        border-left: 1px dashed #3498db;
-        padding-left: 10px;
-    }
-    
-    .cluster-badge {
+    .category-badge {
         display: inline-block;
-        padding: 3px 8px;
+        padding: 4px 10px;
+        margin: 2px;
+        background: linear-gradient(135deg, #00b09b 0%, #96c93d 100%);
+        color: white;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: 500;
+    }
+    
+    .classification-panel {
+        background: #fafafa;
+        border-radius: 12px;
+        padding: 20px;
+        border: 1px solid #e0e0e0;
+        margin-top: 20px;
+    }
+    
+    .category-card {
+        background: white;
+        border-radius: 10px;
+        padding: 15px;
+        margin-bottom: 10px;
+        border-left: 4px solid;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    
+    .category-card.blue { border-left-color: #3498db; }
+    .category-card.green { border-left-color: #2ecc71; }
+    .category-card.orange { border-left-color: #e67e22; }
+    .category-card.purple { border-left-color: #9b59b6; }
+    .category-card.red { border-left-color: #e74c3c; }
+    .category-card.teal { border-left-color: #1abc9c; }
+    
+    .hierarchy-view {
+        font-family: monospace;
+        font-size: 0.9rem;
+        line-height: 1.8;
+        background: #f8f9fa;
+        padding: 15px;
+        border-radius: 8px;
+        border: 1px solid #dee2e6;
+    }
+    
+    .hierarchy-line {
+        color: #6c757d;
+    }
+    
+    .hierarchy-node {
+        color: #2c3e50;
+        font-weight: 500;
+    }
+    
+    .hierarchy-count {
+        background: #667eea;
+        color: white;
+        padding: 2px 6px;
         border-radius: 12px;
         font-size: 0.75rem;
-        font-weight: 600;
-        margin-right: 5px;
-    }
-    
-    .badge-primary {
-        background: #3498db;
-        color: white;
-    }
-    
-    .badge-success {
-        background: #2ecc71;
-        color: white;
-    }
-    
-    .badge-warning {
-        background: #f39c12;
-        color: white;
-    }
-    
-    .badge-danger {
-        background: #e74c3c;
-        color: white;
-    }
-    
-    .badge-purple {
-        background: #9b59b6;
-        color: white;
+        margin-left: 8px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -407,1502 +425,1899 @@ COMMON_WORDS = {
 ALL_STOPWORDS = set(stopwords.words('english')).union(COMMON_WORDS)
 
 # ============================================================================
-# НОВЫЕ КЛАССЫ ДЛЯ ИЕРАРХИЧЕСКОЙ КЛАССИФИКАЦИИ
+# НОВЫЙ КЛАСС ДЛЯ ПОСТРОЕНИЯ ЗАПРОСОВ OPENALEX
 # ============================================================================
 
-class LogicOperator(Enum):
-    """Операторы логики для многоуровневых запросов"""
-    AND = "AND"
-    OR = "OR"
-    NOT = "NOT"
-
-@dataclass
-class FilterTerm:
-    """Термин фильтрации с оператором"""
-    term: str
-    operator: LogicOperator = LogicOperator.AND
-    field: str = "title_and_abstract"  # title, abstract, title_and_abstract
-
-@dataclass
-class FilterLevel:
-    """Уровень иерархической фильтрации"""
-    level_num: int
-    query: str
-    logic: LogicOperator = LogicOperator.AND
-    terms: List[FilterTerm] = field(default_factory=list)
+class OpenAlexQueryBuilder:
+    """
+    Строит сложные запросы для OpenAlex с поддержкой вложенных логических операций
+    и многоуровневой фильтрации.
+    """
     
-    def __post_init__(self):
-        self.parse_query()
-    
-    def parse_query(self):
-        """Парсит строку запроса в список терминов"""
-        self.terms = []
+    def __init__(self):
+        self.base_url = OPENALEX_BASE_URL
+        self.filters = []
+        self.search_fields = ["title", "abstract"]  # По умолчанию ищем в заголовках и абстрактах
+        self.years_filter = None
+        self.citation_filter = None
+        self.concept_filter = None
+        self.author_filter = None
+        self.journal_filter = None
         
-        if not self.query:
-            return
+    def parse_logical_term(self, term: str) -> Dict[str, Any]:
+        """
+        Парсит термин с логическими операторами AND/OR.
         
-        # Разбиваем на части с учетом скобок
-        # Простой парсер для AND/OR/NOT
-        query_upper = self.query.upper()
+        Примеры:
+        "SOFC" -> {"type": "simple", "term": "SOFC"}
+        "(SOFC and PCFC)" -> {"type": "and", "terms": ["SOFC", "PCFC"]}
+        "(SOFC or PCFC)" -> {"type": "or", "terms": ["SOFC", "PCFC"]}
+        "(SOFC and (PCFC or SOFC-H))" -> {"type": "and", "terms": ["SOFC", {"type": "or", "terms": ["PCFC", "SOFC-H"]}]}
+        """
+        term = term.strip()
         
-        # Проверяем наличие операторов
-        if " AND " in query_upper:
-            parts = self.query.split(" AND ")
-            for part in parts:
-                if part.strip():
-                    self.terms.append(FilterTerm(term=part.strip(), operator=LogicOperator.AND))
-        elif " OR " in query_upper:
-            parts = self.query.split(" OR ")
-            for part in parts:
-                if part.strip():
-                    self.terms.append(FilterTerm(term=part.strip(), operator=LogicOperator.OR))
-        elif " NOT " in query_upper:
-            parts = self.query.split(" NOT ")
-            for i, part in enumerate(parts):
-                if i == 0 and part.strip():
-                    self.terms.append(FilterTerm(term=part.strip(), operator=LogicOperator.AND))
-                elif part.strip():
-                    self.terms.append(FilterTerm(term=part.strip(), operator=LogicOperator.NOT))
-        else:
-            # Простой одиночный термин
-            self.terms.append(FilterTerm(term=self.query.strip(), operator=LogicOperator.AND))
-    
-    def to_openalex_filter_part(self) -> str:
-        """Преобразует уровень в часть фильтра OpenAlex"""
-        if not self.terms:
-            return ""
-        
-        # Строим условия для каждого термина
-        term_conditions = []
-        
-        for term_info in self.terms:
-            term = term_info.term
-            operator = term_info.operator
+        # Проверяем, есть ли скобки
+        if term.startswith('(') and term.endswith(')'):
+            # Убираем внешние скобки
+            inner = term[1:-1].strip()
             
-            if term_info.field == "title":
-                # Поиск только в заголовке
-                condition = f"title.search:{term}"
-            elif term_info.field == "abstract":
-                # Поиск только в аннотации
-                condition = f"abstract.search:{term}"
+            # Ищем операторы вне вложенных скобок
+            depth = 0
+            and_positions = []
+            or_positions = []
+            
+            for i, char in enumerate(inner):
+                if char == '(':
+                    depth += 1
+                elif char == ')':
+                    depth -= 1
+                elif depth == 0:
+                    # Проверяем операторы
+                    if inner[i:i+3].lower() == 'and' and (i == 0 or not inner[i-1].isalnum()):
+                        and_positions.append(i)
+                    elif inner[i:i+2].lower() == 'or' and (i == 0 or not inner[i-1].isalnum()):
+                        or_positions.append(i)
+            
+            # Определяем основной оператор
+            if and_positions and (not or_positions or min(and_positions) < min(or_positions)):
+                # Разделяем по AND
+                terms = []
+                last_pos = 0
+                for pos in and_positions:
+                    part = inner[last_pos:pos].strip()
+                    if part:
+                        terms.append(self.parse_logical_term(part))
+                    last_pos = pos + 3
+                last_part = inner[last_pos:].strip()
+                if last_part:
+                    terms.append(self.parse_logical_term(last_part))
+                return {"type": "and", "terms": terms}
+            
+            elif or_positions:
+                # Разделяем по OR
+                terms = []
+                last_pos = 0
+                for pos in or_positions:
+                    part = inner[last_pos:pos].strip()
+                    if part:
+                        terms.append(self.parse_logical_term(part))
+                    last_pos = pos + 2
+                last_part = inner[last_pos:].strip()
+                if last_part:
+                    terms.append(self.parse_logical_term(last_part))
+                return {"type": "or", "terms": terms}
+            
             else:
-                # Поиск и в заголовке, и в аннотации (объединяем через OR)
-                condition = f"title.search:{term}|abstract.search:{term}"
-            
-            if operator == LogicOperator.NOT:
-                condition = f"!{condition}"
-            
-            term_conditions.append(condition)
+                # Просто термин в скобках
+                return self.parse_logical_term(inner)
         
-        # Объединяем условия в зависимости от логики уровня
-        if self.logic == LogicOperator.AND:
-            return ",".join(term_conditions)
-        elif self.logic == LogicOperator.OR:
-            return "|".join(term_conditions)
         else:
-            return ",".join(term_conditions)
-
-@dataclass
-class YearFilter:
-    """Фильтр по годам публикации"""
-    years: List[int] = field(default_factory=list)
-    ranges: List[Tuple[int, int]] = field(default_factory=list)
+            # Простой термин
+            # Проверяем, не содержит ли он операторы без скобок
+            if ' and ' in term.lower():
+                parts = re.split(r'\s+and\s+', term, flags=re.IGNORECASE)
+                return {"type": "and", "terms": [self.parse_logical_term(p) for p in parts]}
+            elif ' or ' in term.lower():
+                parts = re.split(r'\s+or\s+', term, flags=re.IGNORECASE)
+                return {"type": "or", "terms": [self.parse_logical_term(p) for p in parts]}
+            else:
+                return {"type": "simple", "term": term}
     
-    def add_year(self, year: int):
-        if year not in self.years:
-            self.years.append(year)
-            self.years.sort()
-    
-    def add_range(self, start: int, end: int):
-        self.ranges.append((start, end))
-    
-    def parse_years_string(self, years_str: str):
-        """Парсит строку с годами вида '2000,2021' или '2020-2026' или '2021,2023-2025'"""
-        self.years = []
-        self.ranges = []
+    def build_search_filter(self, parsed_term: Dict[str, Any], level: int) -> str:
+        """
+        Строит фильтр поиска для OpenAlex на основе распарсенного терма.
+        """
+        if parsed_term["type"] == "simple":
+            # Для простого терма используем поиск по заголовку и абстракту
+            term = parsed_term["term"]
+            # Экранируем специальные символы
+            term = term.replace('"', '\\"')
+            return f"title_and_abstract.search:\"{term}\""
         
-        if not years_str or years_str.strip() == "":
-            return
+        elif parsed_term["type"] == "and":
+            # Для AND объединяем через пробел (по умолчанию AND в поиске)
+            sub_filters = [self.build_search_filter(t, level) for t in parsed_term["terms"]]
+            # Извлекаем значения search из фильтров
+            search_terms = []
+            for f in sub_filters:
+                if f.startswith("title_and_abstract.search:"):
+                    term = f.replace("title_and_abstract.search:", "").strip('"')
+                    search_terms.append(term)
+            
+            if search_terms:
+                return f"title_and_abstract.search:\"{' '.join(search_terms)}\""
+            else:
+                return ",".join(sub_filters)
         
-        parts = years_str.split(',')
+        elif parsed_term["type"] == "or":
+            # Для OR используем |
+            sub_filters = [self.build_search_filter(t, level) for t in parsed_term["terms"]]
+            search_terms = []
+            for f in sub_filters:
+                if f.startswith("title_and_abstract.search:"):
+                    term = f.replace("title_and_abstract.search:", "").strip('"')
+                    search_terms.append(term)
+            
+            if search_terms:
+                return f"title_and_abstract.search:\"{'|'.join(search_terms)}\""
+            else:
+                return "|".join(sub_filters)
+        
+        return ""
+    
+    def add_level_filter(self, term: str, level: int):
+        """
+        Добавляет фильтр для определенного уровня иерархии.
+        """
+        parsed = self.parse_logical_term(term)
+        search_filter = self.build_search_filter(parsed, level)
+        
+        self.filters.append({
+            "level": level,
+            "original_term": term,
+            "parsed_term": parsed,
+            "search_filter": search_filter
+        })
+        
+        logger.info(f"Added level {level} filter: {term} -> {search_filter}")
+    
+    def parse_years(self, years_input: str) -> Optional[str]:
+        """
+        Парсит строку годов и возвращает OpenAlex year filter.
+        
+        Примеры:
+        "2000,2021" -> "publication_year:2000|2021"
+        "2020-2026" -> "publication_year:2020-2026"
+        "2021,2023-2025" -> "publication_year:2021|2023-2025"
+        """
+        if not years_input or years_input.strip() == "":
+            return None
+        
+        parts = years_input.split(',')
+        year_filters = []
+        
         for part in parts:
             part = part.strip()
             if '-' in part:
-                # Диапазон
+                # Диапазон годов
                 try:
                     start, end = part.split('-')
                     start = int(start.strip())
                     end = int(end.strip())
-                    if start <= end:
-                        self.ranges.append((start, end))
+                    
+                    if start <= end and 1900 <= start <= 2100 and 1900 <= end <= 2100:
+                        year_filters.append(f"{start}-{end}")
+                    else:
+                        logger.warning(f"Invalid year range: {part}")
                 except ValueError:
                     logger.warning(f"Could not parse year range: {part}")
             else:
-                # Конкретный год
+                # Одиночный год
                 try:
-                    year = int(part)
-                    self.years.append(year)
+                    year = int(part.strip())
+                    if 1900 <= year <= 2100:
+                        year_filters.append(str(year))
+                    else:
+                        logger.warning(f"Year out of range: {year}")
                 except ValueError:
                     logger.warning(f"Could not parse year: {part}")
         
-        self.years.sort()
-        self.ranges.sort()
+        if year_filters:
+            self.years_filter = f"publication_year:{'|'.join(year_filters)}"
+            return self.years_filter
+        
+        return None
     
-    def to_openalex_filter(self) -> str:
-        """Преобразует в строку фильтра OpenAlex"""
-        if not self.years and not self.ranges:
-            return ""
+    def parse_citations(self, citations_input: str) -> Optional[str]:
+        """
+        Парсит строку цитирований.
         
-        year_parts = []
+        Примеры:
+        "0-10" -> "cited_by_count:0-10"
+        "5,10-20" -> "cited_by_count:5|10-20"
+        """
+        if not citations_input or citations_input.strip() == "":
+            return None
         
-        # Добавляем конкретные года
-        for year in self.years:
-            year_parts.append(str(year))
+        parts = citations_input.split(',')
+        citation_filters = []
         
-        # Добавляем диапазоны
-        for start, end in self.ranges:
-            year_parts.append(f"{start}-{end}")
+        for part in parts:
+            part = part.strip()
+            if '-' in part:
+                try:
+                    start, end = part.split('-')
+                    start = int(start.strip())
+                    end = int(end.strip())
+                    
+                    if start <= end and 0 <= start and 0 <= end:
+                        citation_filters.append(f"{start}-{end}")
+                except ValueError:
+                    logger.warning(f"Could not parse citation range: {part}")
+            else:
+                try:
+                    count = int(part.strip())
+                    if count >= 0:
+                        citation_filters.append(str(count))
+                except ValueError:
+                    logger.warning(f"Could not parse citation count: {part}")
         
-        return "|".join(year_parts)
+        if citation_filters:
+            self.citation_filter = f"cited_by_count:{'|'.join(citation_filters)}"
+            return self.citation_filter
+        
+        return None
     
-    def matches_year(self, year: int) -> bool:
-        """Проверяет, соответствует ли год фильтру"""
-        if not self.years and not self.ranges:
-            return True
-        
-        if year in self.years:
-            return True
-        
-        for start, end in self.ranges:
-            if start <= year <= end:
-                return True
-        
-        return False
-
-@dataclass
-class HierarchicalFilter:
-    """Иерархический фильтр с несколькими уровнями"""
-    levels: List[FilterLevel] = field(default_factory=list)
-    years_filter: YearFilter = field(default_factory=YearFilter)
-    filter_id: str = field(default_factory=lambda: hashlib.md5(str(time.time()).encode()).hexdigest()[:8])
-    
-    def add_level(self, level: FilterLevel):
-        self.levels.append(level)
-    
-    def build_full_filter(self) -> str:
-        """Строит полный фильтр для OpenAlex API"""
+    def build_query(self, level: Optional[int] = None) -> str:
+        """
+        Собирает все фильтры до указанного уровня в один запрос.
+        Если level не указан, использует все уровни.
+        """
         filter_parts = []
         
-        # Добавляем каждый уровень
-        for level in self.levels:
-            level_part = level.to_openalex_filter_part()
-            if level_part:
-                filter_parts.append(level_part)
+        # Добавляем фильтры уровней
+        for f in self.filters:
+            if level is None or f["level"] <= level:
+                if f["search_filter"]:
+                    filter_parts.append(f["search_filter"])
         
         # Добавляем фильтр по годам
-        years_part = self.years_filter.to_openalex_filter()
-        if years_part:
-            filter_parts.append(f"publication_year:{years_part}")
+        if self.years_filter:
+            filter_parts.append(self.years_filter)
         
-        # Объединяем все через запятую (AND между уровнями)
-        return ",".join(filter_parts)
+        # Добавляем фильтр по цитированиям
+        if self.citation_filter:
+            filter_parts.append(self.citation_filter)
+        
+        # Добавляем другие фильтры
+        if self.concept_filter:
+            filter_parts.append(self.concept_filter)
+        if self.author_filter:
+            filter_parts.append(self.author_filter)
+        if self.journal_filter:
+            filter_parts.append(self.journal_filter)
+        
+        if filter_parts:
+            return ",".join(filter_parts)
+        
+        return ""
     
-    def get_cache_key(self) -> str:
-        """Генерирует ключ для кэширования"""
-        filter_str = self.build_full_filter()
-        return hashlib.md5(f"hier_{filter_str}".encode()).hexdigest()
+    def get_query_description(self, level: Optional[int] = None) -> str:
+        """
+        Возвращает человекочитаемое описание запроса.
+        """
+        lines = ["Query filters:"]
+        
+        for f in self.filters:
+            if level is None or f["level"] <= level:
+                lines.append(f"  Level {f['level']}: {f['original_term']}")
+        
+        if self.years_filter:
+            lines.append(f"  Years: {self.years_filter}")
+        if self.citation_filter:
+            lines.append(f"  Citations: {self.citation_filter}")
+        
+        return "\n".join(lines)
 
-class ClassificationRule:
-    """Правило классификации для категории"""
-    def __init__(self, category_name: str, keywords: List[str], case_sensitive: bool = False):
-        self.category_name = category_name
-        self.keywords = [k.lower() if not case_sensitive else k for k in keywords]
-        self.case_sensitive = case_sensitive
-    
-    def matches(self, text: str) -> bool:
-        """Проверяет, соответствует ли текст правилу"""
-        if not text:
-            return False
-        
-        search_text = text if self.case_sensitive else text.lower()
-        
-        for keyword in self.keywords:
-            if keyword in search_text:
-                return True
-        
-        return False
-    
-    def calculate_relevance(self, text: str) -> float:
-        """Рассчитывает релевантность текста для категории"""
-        if not text:
-            return 0.0
-        
-        search_text = text if self.case_sensitive else text.lower()
-        score = 0.0
-        
-        for keyword in self.keywords:
-            # Считаем вхождения
-            count = search_text.count(keyword)
-            score += count * 1.0
-            
-            # Бонус за точное совпадение фразы
-            if len(keyword.split()) > 1 and keyword in search_text:
-                score += 2.0
-        
-        return score
 
-class PaperClassifier:
-    """Классификатор статей по заданным категориям"""
-    def __init__(self, rules: Dict[str, ClassificationRule]):
-        self.rules = rules
-    
-    @classmethod
-    def from_keyword_dict(cls, keyword_dict: Dict[str, List[str]]):
-        """Создает классификатор из словаря ключевых слов"""
-        rules = {}
-        for category, keywords in keyword_dict.items():
-            rules[category] = ClassificationRule(category, keywords)
-        return cls(rules)
-    
-    def classify_paper(self, paper: Dict) -> Dict[str, Any]:
-        """Классифицирует одну статью"""
-        title = paper.get('title', '')
-        abstract = paper.get('abstract', '')
-        
-        # Объединяем заголовок и аннотацию для поиска
-        full_text = f"{title} {abstract}".lower()
-        
-        results = {
-            'categories': [],
-            'scores': {},
-            'primary_category': None,
-            'matched_keywords': {}
-        }
-        
-        for category, rule in self.rules.items():
-            if rule.matches(full_text):
-                results['categories'].append(category)
-                score = rule.calculate_relevance(full_text)
-                results['scores'][category] = score
-                
-                # Находим совпавшие ключевые слова
-                matched = []
-                for keyword in rule.keywords:
-                    if keyword in full_text:
-                        matched.append(keyword)
-                results['matched_keywords'][category] = matched
-        
-        # Определяем основную категорию (с максимальным счетом)
-        if results['scores']:
-            results['primary_category'] = max(results['scores'], key=results['scores'].get)
-        
-        return results
-    
-    def classify_papers_batch(self, papers: List[Dict]) -> Dict[str, List[Dict]]:
-        """Классифицирует пакет статей"""
-        classified = {category: [] for category in self.rules.keys()}
-        classified['unclassified'] = []
-        
-        for paper in papers:
-            result = self.classify_paper(paper)
-            
-            if result['categories']:
-                for category in result['categories']:
-                    paper_copy = paper.copy()
-                    paper_copy['classification_score'] = result['scores'].get(category, 0)
-                    paper_copy['matched_keywords'] = result['matched_keywords'].get(category, [])
-                    classified[category].append(paper_copy)
-            else:
-                classified['unclassified'].append(paper)
-        
-        return classified
+# ============================================================================
+# НОВЫЙ КЛАСС ДЛЯ ИЕРАРХИЧЕСКОЙ КЛАСТЕРИЗАЦИИ
+# ============================================================================
 
-class HierarchyNode:
-    """Узел иерархического дерева для визуализации"""
-    def __init__(self, name: str, node_type: str = "category"):
+class HierarchicalClusterNode:
+    """Узел иерархического дерева кластеризации."""
+    
+    def __init__(self, name: str, level: int, filter_term: str, parent=None):
         self.name = name
-        self.node_type = node_type  # "root", "level", "category", "paper"
+        self.level = level
+        self.filter_term = filter_term
+        self.parent = parent
         self.children = []
-        self.papers = []
-        self.size = 0
-        self.metadata = {}
+        self.works = []  # Список работ в этом узле
+        self.work_count = 0
+        self.dois = []  # DOI для конечных узлов
+        self.metadata = {}  # Дополнительные метаданные
+        
+    def add_child(self, child_node):
+        """Добавляет дочерний узел."""
+        child_node.parent = self
+        self.children.append(child_node)
+        
+    def add_work(self, work: dict):
+        """Добавляет работу в узел."""
+        self.works.append(work)
+        self.work_count += 1
+        
+        # Добавляем DOI в список
+        doi = work.get('doi', '')
+        if doi:
+            doi_clean = doi.replace('https://doi.org/', '')
+            if doi_clean not in self.dois:
+                self.dois.append(doi_clean)
+        
+    def get_all_works(self) -> List[dict]:
+        """Возвращает все работы из узла и его потомков."""
+        all_works = self.works.copy()
+        
+        for child in self.children:
+            all_works.extend(child.get_all_works())
+        
+        return all_works
     
-    def add_child(self, child: 'HierarchyNode'):
-        self.children.append(child)
-        self.update_size()
+    def get_leaf_nodes(self) -> List['HierarchicalClusterNode']:
+        """Возвращает все листовые узлы."""
+        if not self.children:
+            return [self]
+        
+        leaves = []
+        for child in self.children:
+            leaves.extend(child.get_leaf_nodes())
+        
+        return leaves
     
-    def add_paper(self, paper: Dict):
-        self.papers.append(paper)
-        self.update_size()
+    def get_depth(self) -> int:
+        """Возвращает глубину поддерева."""
+        if not self.children:
+            return 1
+        
+        return 1 + max(child.get_depth() for child in self.children)
     
-    def update_size(self):
-        self.size = len(self.papers) + sum(child.size for child in self.children)
+    def get_node_stats(self) -> Dict[str, Any]:
+        """Возвращает статистику по узлу."""
+        return {
+            "name": self.name,
+            "level": self.level,
+            "filter_term": self.filter_term,
+            "work_count": self.work_count,
+            "child_count": len(self.children),
+            "doi_count": len(self.dois),
+            "has_children": len(self.children) > 0
+        }
     
     def to_dict(self) -> Dict:
-        """Преобразует в словарь для визуализации"""
-        result = {
-            'name': self.name,
-            'type': self.node_type,
-            'size': self.size,
+        """Преобразует узел в словарь для сериализации."""
+        return {
+            "name": self.name,
+            "level": self.level,
+            "filter_term": self.filter_term,
+            "work_count": self.work_count,
+            "dois": self.dois[:10],  # Ограничиваем для больших деревьев
+            "children": [child.to_dict() for child in self.children],
+            "metadata": self.metadata
         }
-        
-        if self.metadata:
-            result['metadata'] = self.metadata
-        
-        if self.children:
-            result['children'] = [child.to_dict() for child in self.children]
-        elif self.papers:
-            # Добавляем информацию о статьях
-            result['papers'] = [
-                {
-                    'doi': p.get('doi', ''),
-                    'title': p.get('title', '')[:50] + '...' if len(p.get('title', '')) > 50 else p.get('title', ''),
-                    'year': p.get('publication_year', 0),
-                    'citations': p.get('cited_by_count', 0),
-                    'url': p.get('doi_url', '')
-                }
-                for p in self.papers[:10]  # Ограничиваем для читаемости
-            ]
-            result['paper_count'] = len(self.papers)
-        
-        return result
-    
-    def build_tree(self, classification_results: Dict[str, List[Dict]], 
-                   level_names: List[str] = None) -> 'HierarchyNode':
-        """Строит дерево из результатов классификации"""
-        root = HierarchyNode("Root", "root")
-        
-        if level_names:
-            # Многоуровневое дерево
-            current_level = root
-            
-            for i, level_name in enumerate(level_names):
-                level_node = HierarchyNode(f"Level {i+1}: {level_name}", "level")
-                current_level.add_child(level_node)
-                current_level = level_node
-        
-        # Добавляем категории
-        for category, papers in classification_results.items():
-            if category != 'unclassified' and papers:
-                category_node = HierarchyNode(category, "category")
-                category_node.metadata['paper_count'] = len(papers)
-                
-                # Добавляем статьи как отдельные узлы или группируем
-                if len(papers) <= 20:
-                    # Показываем отдельные статьи
-                    for paper in papers[:20]:
-                        paper_node = HierarchyNode(
-                            paper.get('title', 'Unknown')[:40] + '...', 
-                            "paper"
-                        )
-                        paper_node.metadata = {
-                            'doi': paper.get('doi', ''),
-                            'url': paper.get('doi_url', ''),
-                            'year': paper.get('publication_year', 0),
-                            'citations': paper.get('cited_by_count', 0),
-                            'score': paper.get('classification_score', 0)
-                        }
-                        paper_node.size = 1
-                        category_node.add_child(paper_node)
-                else:
-                    # Группируем по годам или релевантности
-                    by_year = {}
-                    for paper in papers:
-                        year = paper.get('publication_year', 0)
-                        if year not in by_year:
-                            by_year[year] = []
-                        by_year[year].append(paper)
-                    
-                    for year, year_papers in sorted(by_year.items(), reverse=True)[:5]:
-                        year_node = HierarchyNode(f"Year {year} ({len(year_papers)} papers)", "year")
-                        year_node.size = len(year_papers)
-                        year_node.metadata['papers_sample'] = [
-                            {'doi': p.get('doi'), 'title': p.get('title')[:30] + '...'}
-                            for p in year_papers[:3]
-                        ]
-                        category_node.add_child(year_node)
-                
-                root.add_child(category_node)
-        
-        # Добавляем неклассифицированные
-        if classification_results.get('unclassified'):
-            unclassified_node = HierarchyNode("Unclassified", "category")
-            unclassified_node.size = len(classification_results['unclassified'])
-            unclassified_node.metadata['count'] = len(classification_results['unclassified'])
-            root.add_child(unclassified_node)
-        
-        return root
 
-# ============================================================================
-# НОВЫЕ ФУНКЦИИ ДЛЯ ПОСТРОЕНИЯ ЗАПРОСОВ И ВИЗУАЛИЗАЦИИ
-# ============================================================================
 
-def build_multi_level_filter(level_filters: List[FilterLevel], 
-                            years_filter: YearFilter) -> str:
+class HierarchicalClusterer:
     """
-    Строит сложный фильтр для OpenAlex API с многоуровневой логикой
+    Создает иерархическую структуру на основе последовательных фильтров.
     """
-    filter_parts = []
     
-    # Добавляем каждый уровень
-    for level in level_filters:
-        level_part = level.to_openalex_filter_part()
-        if level_part:
-            filter_parts.append(level_part)
-    
-    # Добавляем фильтр по годам
-    years_part = years_filter.to_openalex_filter()
-    if years_part:
-        filter_parts.append(f"publication_year:{years_part}")
-    
-    # Объединяем все через запятую (AND между уровнями)
-    return ",".join(filter_parts)
-
-def optimize_multi_level_query(level_filters: List[FilterLevel], 
-                              years_filter: YearFilter,
-                              max_results: int = 10000) -> List[Dict]:
-    """
-    Оптимизирует и выполняет многоуровневый запрос с кэшированием
-    """
-    hierarchical_filter = HierarchicalFilter(levels=level_filters, years_filter=years_filter)
-    cache_key = hierarchical_filter.get_cache_key()
-    
-    # Проверяем кэш
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute('''
-        SELECT data FROM topic_works_cache 
-        WHERE topic_id = ? AND cursor_key = ? 
-        AND (expires_at IS NULL OR expires_at > ?)
-    ''', ('hierarchical', cache_key, datetime.now()))
-    
-    result = cursor.fetchone()
-    if result:
-        cached_data = json.loads(result[0])
-        logger.info(f"Using cached hierarchical query results for key {cache_key}")
-        return cached_data.get('works', [])[:max_results]
-    
-    # Выполняем запрос
-    filter_str = build_multi_level_filter(level_filters, years_filter)
-    
-    logger.info(f"Executing hierarchical query with filter: {filter_str}")
-    
-    all_works = []
-    cursor_param = "*"
-    page_count = 0
-    
-    try:
-        while len(all_works) < max_results:
-            page_count += 1
+    def __init__(self, query_builder: OpenAlexQueryBuilder = None):
+        self.query_builder = query_builder or OpenAlexQueryBuilder()
+        self.root = None
+        self.nodes_by_level = {}  # level -> list of nodes
+        self.all_works_cache = {}  # cache для предотвращения повторных запросов
+        self.work_cache = {}  # кэш работ по DOI
+        
+    def build_tree(self, filters: List[str], years_filter: str = None, 
+                  max_works_per_level: int = 5000) -> HierarchicalClusterNode:
+        """
+        Строит дерево на основе последовательности фильтров.
+        
+        Args:
+            filters: Список фильтров для каждого уровня
+            years_filter: Фильтр по годам
+            max_works_per_level: Максимальное количество работ на уровень
+        
+        Returns:
+            Корневой узел дерева
+        """
+        # Создаем корневой узел
+        self.root = HierarchicalClusterNode(
+            name="Root",
+            level=0,
+            filter_term=""
+        )
+        
+        self.nodes_by_level = {0: [self.root]}
+        
+        # Применяем фильтры последовательно
+        current_works = None
+        
+        for level, filter_term in enumerate(filters, 1):
+            logger.info(f"Building level {level} with filter: {filter_term}")
             
-            params = {
-                "filter": filter_str,
-                "per-page": CURSOR_PAGE_SIZE,
-                "cursor": cursor_param,
-                "mailto": MAILTO,
-                "sort": "publication_date:desc"
-            }
+            # Добавляем фильтр в builder
+            self.query_builder.add_level_filter(filter_term, level)
             
-            url = f"{OPENALEX_BASE_URL}/works"
-            response = requests.get(url, params=params, headers=POLITE_POOL_HEADER, timeout=60)
+            # Получаем работы для этого уровня
+            level_works = self._fetch_works_for_level(level, max_works_per_level)
             
-            if response.status_code != 200:
-                logger.error(f"Error fetching works: {response.status_code}")
-                break
+            # Создаем узлы для этого уровня
+            level_nodes = self._create_level_nodes(level, filter_term, level_works)
             
-            data = response.json()
-            works = data.get('results', [])
+            # Связываем с предыдущим уровнем
+            self._link_with_parents(level, level_nodes, current_works)
             
-            if not works:
-                break
+            self.nodes_by_level[level] = level_nodes
+            current_works = level_works
             
-            all_works.extend(works)
-            logger.info(f"Page {page_count}: got {len(works)} works, total: {len(all_works)}")
-            
-            # Получаем следующий курсор
-            next_cursor = data.get('meta', {}).get('next_cursor')
-            if not next_cursor:
-                break
-            
-            cursor_param = next_cursor
-            
-            # Небольшая задержка для соблюдения rate limit
-            time.sleep(0.1)
+            logger.info(f"Level {level}: created {len(level_nodes)} nodes with {len(level_works)} works")
+        
+        return self.root
+    
+    def _fetch_works_for_level(self, level: int, max_works: int) -> List[dict]:
+        """
+        Загружает работы для указанного уровня с использованием кэша.
+        """
+        # Строим запрос для этого уровня
+        query = self.query_builder.build_query(level)
+        
+        # Проверяем кэш
+        cache_key = f"level_{level}_{hashlib.md5(query.encode()).hexdigest()}"
+        
+        if cache_key in self.all_works_cache:
+            logger.info(f"Using cached works for level {level}")
+            return self.all_works_cache[cache_key]
+        
+        # Загружаем из OpenAlex
+        works = self._fetch_from_openalex(query, max_works)
         
         # Сохраняем в кэш
-        if all_works:
-            cache_data = {
-                'works': all_works,
-                'filter': filter_str,
-                'timestamp': datetime.now().isoformat(),
-                'count': len(all_works)
-            }
+        self.all_works_cache[cache_key] = works
+        
+        return works
+    
+    def _fetch_from_openalex(self, query: str, max_works: int) -> List[dict]:
+        """
+        Загружает работы из OpenAlex API.
+        """
+        all_works = []
+        cursor = "*"
+        
+        with st.spinner(f"Loading works with filter: {query[:50]}..."):
+            progress_bar = st.progress(0)
+            status_text = st.empty()
             
-            expires_at = datetime.now() + timedelta(days=3)
-            cursor.execute('''
-                INSERT OR REPLACE INTO topic_works_cache (topic_id, cursor_key, data, expires_at)
-                VALUES (?, ?, ?, ?)
-            ''', ('hierarchical', cache_key, json.dumps(cache_data), expires_at))
-            conn.commit()
+            try:
+                while len(all_works) < max_works:
+                    params = {
+                        "filter": query,
+                        "per-page": CURSOR_PAGE_SIZE,
+                        "cursor": cursor,
+                        "mailto": MAILTO,
+                        "sort": "publication_date:desc"
+                    }
+                    
+                    url = f"{OPENALEX_BASE_URL}/works"
+                    response = requests.get(url, params=params, headers=POLITE_POOL_HEADER, timeout=60)
+                    
+                    if response.status_code != 200:
+                        logger.error(f"Error fetching works: {response.status_code}")
+                        break
+                    
+                    data = response.json()
+                    works = data.get('results', [])
+                    
+                    if not works:
+                        break
+                    
+                    all_works.extend(works)
+                    
+                    # Обновляем прогресс
+                    progress = min(len(all_works) / max_works, 1.0)
+                    progress_bar.progress(progress)
+                    status_text.text(f"Loaded {len(all_works)} works...")
+                    
+                    # Получаем следующий курсор
+                    next_cursor = data.get('meta', {}).get('next_cursor')
+                    if not next_cursor:
+                        break
+                    
+                    cursor = next_cursor
+                    
+                    # Небольшая задержка
+                    time.sleep(0.1)
+                
+                progress_bar.empty()
+                status_text.empty()
+                
+            except Exception as e:
+                logger.error(f"Error in _fetch_from_openalex: {str(e)}")
+                progress_bar.empty()
+                status_text.empty()
         
-        return all_works[:max_results]
+        return all_works[:max_works]
+    
+    def _create_level_nodes(self, level: int, filter_term: str, 
+                           works: List[dict]) -> List[HierarchicalClusterNode]:
+        """
+        Создает узлы для указанного уровня на основе работ.
+        """
+        # Группируем работы по какому-либо признаку
+        # Например, по основным концепциям или ключевым словам
+        nodes = []
         
-    except Exception as e:
-        logger.error(f"Error in optimize_multi_level_query: {str(e)}")
-        return all_works[:max_results]
-
-def create_dendrogram(hierarchy_tree: HierarchyNode) -> go.Figure:
-    """
-    Создает интерактивную дендрограмму (древовидную диаграмму)
-    """
-    # Преобразуем дерево в формат для treemap
-    def extract_tree_data(node, parent_name="", level=0):
-        labels = []
-        parents = []
-        values = []
-        customdata = []
-        colors = []
+        # Извлекаем ключевые слова из работ
+        keywords_counter = Counter()
+        for work in works:
+            title = work.get('title', '')
+            abstract = work.get('abstract', '')
+            text = f"{title} {abstract}".lower()
+            
+            # Извлекаем ключевые слова
+            words = re.findall(r'\b[a-z]{4,}\b', text)
+            keywords_counter.update(words)
         
-        node_name = f"{node.name} ({node.size})"
-        labels.append(node_name)
-        parents.append(parent_name)
-        values.append(node.size)
+        # Берем топ-10 ключевых слов для создания подузлов
+        top_keywords = [kw for kw, _ in keywords_counter.most_common(10)]
         
-        # Добавляем метаданные
-        if node.node_type == "paper" and node.metadata.get('doi'):
-            customdata.append(node.metadata.get('doi', ''))
-        else:
-            customdata.append("")
-        
-        # Определяем цвет в зависимости от типа
-        if node.node_type == "root":
-            colors.append("#2C3E50")
-        elif node.node_type == "level":
-            colors.append("#3498DB")
-        elif node.node_type == "category":
-            colors.append("#9B59B6")
-        elif node.node_type == "paper":
-            colors.append("#2ECC71")
-        else:
-            colors.append("#95A5A6")
-        
-        # Рекурсивно обрабатываем детей
-        for child in node.children:
-            child_labels, child_parents, child_values, child_customdata, child_colors = extract_tree_data(
-                child, node_name, level + 1
+        for keyword in top_keywords[:5]:  # Ограничиваем количество подузлов
+            node = HierarchicalClusterNode(
+                name=keyword,
+                level=level,
+                filter_term=f"{filter_term} + {keyword}"
             )
-            labels.extend(child_labels)
-            parents.extend(child_parents)
-            values.extend(child_values)
-            customdata.extend(child_customdata)
-            colors.extend(child_colors)
+            
+            # Добавляем работы, содержащие это ключевое слово
+            for work in works:
+                title = work.get('title', '').lower()
+                abstract = work.get('abstract', '').lower()
+                
+                if keyword in title or keyword in abstract:
+                    node.add_work(work)
+            
+            if node.work_count > 0:
+                nodes.append(node)
         
-        return labels, parents, values, customdata, colors
-    
-    labels, parents, values, customdata, colors = extract_tree_data(hierarchy_tree)
-    
-    # Создаем treemap
-    fig = go.Figure(go.Treemap(
-        labels=labels,
-        parents=parents,
-        values=values,
-        customdata=customdata,
-        hovertemplate='<b>%{label}</b><br>Papers: %{value}<br>DOI: %{customdata}<extra></extra>',
-        marker=dict(
-            colors=colors,
-            line=dict(width=1, color='white')
-        ),
-        textinfo="label+value",
-        textfont=dict(size=12),
-        pathbar=dict(visible=True)
-    ))
-    
-    fig.update_layout(
-        title={
-            'text': "Hierarchical Classification Tree",
-            'x': 0.5,
-            'xanchor': 'center'
-        },
-        width=900,
-        height=600,
-        margin=dict(t=50, l=25, r=25, b=25)
-    )
-    
-    return fig
-
-def create_sunburst_chart(hierarchy_tree: HierarchyNode) -> go.Figure:
-    """
-    Создает диаграмму-солнце для иерархической классификации
-    """
-    # Преобразуем дерево в формат для sunburst
-    def extract_sunburst_data(node, parent_name="", depth=0):
-        ids = []
-        labels = []
-        parents = []
-        values = []
-        
-        node_id = f"{node.name}_{depth}_{len(ids)}"
-        ids.append(node_id)
-        labels.append(node.name)
-        parents.append(parent_name)
-        values.append(node.size)
-        
-        for child in node.children:
-            child_ids, child_labels, child_parents, child_values = extract_sunburst_data(
-                child, node_id, depth + 1
+        # Если не удалось создать узлы по ключевым словам, создаем один узел
+        if not nodes:
+            node = HierarchicalClusterNode(
+                name=filter_term[:30],
+                level=level,
+                filter_term=filter_term
             )
-            ids.extend(child_ids)
-            labels.extend(child_labels)
-            parents.extend(child_parents)
-            values.extend(child_values)
+            
+            for work in works:
+                node.add_work(work)
+            
+            nodes.append(node)
         
-        return ids, labels, parents, values
+        return nodes
     
-    ids, labels, parents, values = extract_sunburst_data(hierarchy_tree)
+    def _link_with_parents(self, level: int, current_nodes: List[HierarchicalClusterNode],
+                           parent_works: List[dict]):
+        """
+        Связывает текущие узлы с родительскими на основе parent_works.
+        """
+        if level == 1:
+            # Первый уровень связываем с корнем
+            for node in current_nodes:
+                self.root.add_child(node)
+            return
+        
+        parent_nodes = self.nodes_by_level.get(level - 1, [])
+        
+        # Для каждого текущего узла ищем подходящего родителя
+        for node in current_nodes:
+            # Ищем родителя, который содержит работы этого узла
+            for parent in parent_nodes:
+                # Проверяем пересечение работ
+                node_dois = {w.get('doi', '') for w in node.works if w.get('doi')}
+                parent_dois = {w.get('doi', '') for w in parent.works if w.get('doi')}
+                
+                if node_dois.intersection(parent_dois):
+                    parent.add_child(node)
+                    break
+            else:
+                # Если не нашли родителя, прикрепляем к первому
+                if parent_nodes:
+                    parent_nodes[0].add_child(node)
     
-    fig = go.Figure(go.Sunburst(
-        ids=ids,
-        labels=labels,
-        parents=parents,
-        values=values,
-        branchvalues="total",
-        hovertemplate='<b>%{label}</b><br>Papers: %{value}<br><extra></extra>',
-        marker=dict(
-            colorscale='Viridis',
-            line=dict(width=1, color='white')
-        )
-    ))
+    def get_dendrogram_data(self) -> Dict[str, Any]:
+        """
+        Возвращает данные для построения дендрограммы в формате, совместимом с Vega-Lite.
+        """
+        if not self.root:
+            return {"nodes": [], "links": []}
+        
+        nodes = []
+        links = []
+        
+        # Обходим дерево и собираем узлы и связи
+        def traverse(node: HierarchicalClusterNode, node_id: str = "root"):
+            node_data = {
+                "id": node_id,
+                "name": node.name,
+                "level": node.level,
+                "size": node.work_count,
+                "doi_count": len(node.dois),
+                "has_children": len(node.children) > 0
+            }
+            nodes.append(node_data)
+            
+            for i, child in enumerate(node.children):
+                child_id = f"{node_id}_{i}"
+                links.append({
+                    "source": node_id,
+                    "target": child_id,
+                    "value": child.work_count
+                })
+                traverse(child, child_id)
+        
+        traverse(self.root)
+        
+        return {
+            "type": "tree",
+            "method": "tidy",
+            "size": [{"signal": "width"}, {"signal": "height"}],
+            "nodes": nodes,
+            "links": links
+        }
     
-    fig.update_layout(
-        title={
-            'text': "Hierarchical Classification Sunburst",
-            'x': 0.5,
-            'xanchor': 'center'
-        },
-        width=800,
-        height=600,
-        margin=dict(t=50, l=0, r=0, b=0)
-    )
-    
-    return fig
+    def get_cluster_statistics(self) -> pd.DataFrame:
+        """
+        Возвращает статистику по кластерам в виде DataFrame.
+        """
+        if not self.root:
+            return pd.DataFrame()
+        
+        stats_data = []
+        
+        def collect_stats(node: HierarchicalClusterNode):
+            stats_data.append({
+                "Level": node.level,
+                "Cluster": node.name,
+                "Filter": node.filter_term,
+                "Papers": node.work_count,
+                "DOIs": len(node.dois),
+                "Children": len(node.children)
+            })
+            
+            for child in node.children:
+                collect_stats(child)
+        
+        collect_stats(self.root)
+        
+        return pd.DataFrame(stats_data)
 
-def create_category_bar_chart(classification_results: Dict[str, List[Dict]]) -> go.Figure:
-    """
-    Создает столбчатую диаграмму количества статей по категориям
-    """
-    categories = []
-    counts = []
-    colors = ['#3498DB', '#9B59B6', '#2ECC71', '#F39C12', '#E74C3C', '#1ABC9C']
-    
-    for category, papers in classification_results.items():
-        if category != 'unclassified' and papers:
-            categories.append(category)
-            counts.append(len(papers))
-    
-    # Добавляем неклассифицированные
-    if classification_results.get('unclassified'):
-        categories.append('Unclassified')
-        counts.append(len(classification_results['unclassified']))
-    
-    fig = go.Figure(data=[
-        go.Bar(
-            x=categories,
-            y=counts,
-            text=counts,
-            textposition='auto',
-            marker_color=colors[:len(categories)],
-            hovertemplate='<b>%{x}</b><br>Papers: %{y}<extra></extra>'
-        )
-    ])
-    
-    fig.update_layout(
-        title={
-            'text': "Papers by Classification Category",
-            'x': 0.5,
-            'xanchor': 'center'
-        },
-        xaxis_title="Category",
-        yaxis_title="Number of Papers",
-        showlegend=False,
-        width=800,
-        height=500,
-        bargap=0.3
-    )
-    
-    return fig
 
-def create_pie_chart(classification_results: Dict[str, List[Dict]]) -> go.Figure:
+# ============================================================================
+# НОВЫЙ КЛАСС ДЛЯ КЛАССИФИКАЦИИ ПО КАТЕГОРИЯМ
+# ============================================================================
+
+class CategoryClassifier:
     """
-    Создает круговую диаграмму распределения статей по категориям
+    Классифицирует найденные работы по предопределенным категориям.
     """
-    categories = []
-    counts = []
     
-    for category, papers in classification_results.items():
-        if papers:
-            categories.append(category)
-            counts.append(len(papers))
+    def __init__(self):
+        self.categories = {}  # {category_name: category_config}
+        self.classification_results = {}
+        self.category_colors = [
+            "#3498db", "#2ecc71", "#e67e22", "#9b59b6", 
+            "#e74c3c", "#1abc9c", "#f39c12", "#d35400",
+            "#c0392b", "#16a085", "#27ae60", "#2980b9",
+            "#8e44ad", "#2c3e50", "#7f8c8d", "#95a5a6"
+        ]
+        
+    def add_category(self, name: str, terms: List[str], logic: str = "OR", 
+                     description: str = "", color: str = None):
+        """
+        Добавляет категорию для классификации.
+        
+        Args:
+            name: Название категории
+            terms: Список поисковых терминов
+            logic: Логика объединения терминов ("OR" или "AND")
+            description: Описание категории
+            color: Цвет для визуализации (если None, будет выбран автоматически)
+        """
+        # Нормализуем термины
+        normalized_terms = [term.strip().lower() for term in terms if term.strip()]
+        
+        if not normalized_terms:
+            logger.warning(f"No valid terms for category {name}")
+            return
+        
+        # Выбираем цвет, если не указан
+        if color is None:
+            color_idx = len(self.categories) % len(self.category_colors)
+            color = self.category_colors[color_idx]
+        
+        self.categories[name] = {
+            "name": name,
+            "terms": normalized_terms,
+            "logic": logic.upper(),
+            "description": description,
+            "color": color,
+            "query_builder": self._build_category_query(normalized_terms, logic)
+        }
+        
+        logger.info(f"Added category: {name} with {len(normalized_terms)} terms ({logic})")
     
-    fig = go.Figure(data=[
-        go.Pie(
-            labels=categories,
-            values=counts,
-            hole=0.3,
-            textinfo='label+percent',
-            insidetextorientation='radial',
+    def _build_category_query(self, terms: List[str], logic: str) -> str:
+        """
+        Строит поисковый запрос для категории.
+        """
+        if logic == "AND":
+            # Для AND объединяем через пробел
+            return f"title_and_abstract.search:\"{' '.join(terms)}\""
+        else:
+            # Для OR используем |
+            return f"title_and_abstract.search:\"{'|'.join(terms)}\""
+    
+    def classify_works(self, works: List[dict]) -> Dict[str, List[dict]]:
+        """
+        Распределяет работы по категориям.
+        
+        Returns:
+            Словарь {category_name: список работ}
+        """
+        if not self.categories:
+            logger.warning("No categories defined for classification")
+            return {}
+        
+        # Инициализируем результаты
+        classification = {name: [] for name in self.categories.keys()}
+        classification["Unclassified"] = []
+        
+        # Для каждой работы проверяем все категории
+        for work in works:
+            title = work.get('title', '').lower()
+            abstract = work.get('abstract', '').lower()
+            text = f"{title} {abstract}"
+            
+            matched_categories = []
+            
+            for cat_name, cat_config in self.categories.items():
+                terms = cat_config["terms"]
+                logic = cat_config["logic"]
+                
+                if logic == "AND":
+                    # Все термины должны присутствовать
+                    if all(term in text for term in terms):
+                        matched_categories.append(cat_name)
+                else:  # OR
+                    # Хотя бы один термин должен присутствовать
+                    if any(term in text for term in terms):
+                        matched_categories.append(cat_name)
+            
+            # Если работа попала в несколько категорий, добавляем во все
+            if matched_categories:
+                for cat_name in matched_categories:
+                    classification[cat_name].append(work)
+            else:
+                classification["Unclassified"].append(work)
+        
+        self.classification_results = classification
+        return classification
+    
+    def get_statistics(self, classification: Dict[str, List[dict]] = None) -> pd.DataFrame:
+        """
+        Возвращает статистику по категориям.
+        """
+        if classification is None:
+            classification = self.classification_results
+        
+        if not classification:
+            return pd.DataFrame()
+        
+        stats_data = []
+        total_works = sum(len(works) for works in classification.values())
+        
+        for cat_name, works in classification.items():
+            if cat_name == "Unclassified":
+                continue
+            
+            # Собираем статистику
+            works_count = len(works)
+            percentage = (works_count / total_works * 100) if total_works > 0 else 0
+            
+            # Статистика по цитированиям
+            citations = [w.get('cited_by_count', 0) for w in works]
+            avg_citations = np.mean(citations) if citations else 0
+            max_citations = max(citations) if citations else 0
+            
+            # Статистика по годам
+            years = [w.get('publication_year', 0) for w in works if w.get('publication_year')]
+            recent_count = sum(1 for y in years if y >= datetime.now().year - 2)
+            
+            # Open Access статистика
+            oa_count = sum(1 for w in works if w.get('is_oa'))
+            
+            # Авторы
+            all_authors = []
+            for w in works:
+                all_authors.extend(w.get('authors', []))
+            unique_authors = len(set(all_authors))
+            
+            stats_data.append({
+                "Category": cat_name,
+                "Papers": works_count,
+                "Percentage": f"{percentage:.1f}%",
+                "Avg Citations": f"{avg_citations:.1f}",
+                "Max Citations": max_citations,
+                "Recent Papers (≤2y)": recent_count,
+                "Open Access": oa_count,
+                "Unique Authors": unique_authors,
+                "Color": self.categories.get(cat_name, {}).get("color", "#95a5a6")
+            })
+        
+        # Добавляем статистику для неклассифицированных
+        if "Unclassified" in classification:
+            unclassified_works = classification["Unclassified"]
+            if unclassified_works:
+                stats_data.append({
+                    "Category": "Unclassified",
+                    "Papers": len(unclassified_works),
+                    "Percentage": f"{(len(unclassified_works) / total_works * 100):.1f}%" if total_works > 0 else "0%",
+                    "Avg Citations": f"{np.mean([w.get('cited_by_count', 0) for w in unclassified_works]):.1f}",
+                    "Max Citations": max([w.get('cited_by_count', 0) for w in unclassified_works]) if unclassified_works else 0,
+                    "Recent Papers (≤2y)": sum(1 for w in unclassified_works if w.get('publication_year', 0) >= datetime.now().year - 2),
+                    "Open Access": sum(1 for w in unclassified_works if w.get('is_oa')),
+                    "Unique Authors": len(set([a for w in unclassified_works for a in w.get('authors', [])])),
+                    "Color": "#95a5a6"
+                })
+        
+        return pd.DataFrame(stats_data)
+    
+    def get_category_details(self, category_name: str) -> Dict[str, Any]:
+        """
+        Возвращает детальную информацию по категории.
+        """
+        if category_name not in self.classification_results:
+            return {}
+        
+        works = self.classification_results[category_name]
+        
+        if not works:
+            return {}
+        
+        # Группировка по годам
+        years_distribution = {}
+        for work in works:
+            year = work.get('publication_year')
+            if year:
+                years_distribution[year] = years_distribution.get(year, 0) + 1
+        
+        # Топ журналы
+        journals = Counter()
+        for work in works:
+            journal = work.get('journal_name')
+            if journal:
+                journals[journal] += 1
+        
+        # Топ авторы
+        authors = Counter()
+        for work in works:
+            for author in work.get('authors', []):
+                authors[author] += 1
+        
+        # Топ ключевые слова из заголовков
+        keywords = Counter()
+        for work in works:
+            title = work.get('title', '')
+            words = re.findall(r'\b[a-zA-Z]{4,}\b', title.lower())
+            keywords.update(words)
+        
+        return {
+            "category_name": category_name,
+            "total_works": len(works),
+            "years_distribution": dict(sorted(years_distribution.items())),
+            "top_journals": journals.most_common(10),
+            "top_authors": authors.most_common(10),
+            "top_keywords": keywords.most_common(20),
+            "sample_dois": [w.get('doi') for w in works[:10] if w.get('doi')]
+        }
+    
+    def export_classification(self, format: str = "json") -> Union[str, bytes]:
+        """
+        Экспортирует результаты классификации.
+        """
+        if format == "json":
+            data = {
+                "categories": self.categories,
+                "results": {
+                    cat: [{"doi": w.get('doi'), "title": w.get('title')} 
+                          for w in works[:100]]  # Ограничиваем для больших данных
+                    for cat, works in self.classification_results.items()
+                },
+                "statistics": self.get_statistics().to_dict('records')
+            }
+            return json.dumps(data, indent=2)
+        
+        elif format == "csv":
+            # Создаем плоскую таблицу
+            rows = []
+            for cat, works in self.classification_results.items():
+                for work in works[:100]:  # Ограничиваем
+                    rows.append({
+                        "Category": cat,
+                        "DOI": work.get('doi'),
+                        "Title": work.get('title'),
+                        "Year": work.get('publication_year'),
+                        "Citations": work.get('cited_by_count'),
+                        "Authors": ", ".join(work.get('authors', [])[:3])
+                    })
+            
+            df = pd.DataFrame(rows)
+            return df.to_csv(index=False, encoding='utf-8-sig')
+        
+        return ""
+
+
+# ============================================================================
+# НОВЫЙ МОДУЛЬ ДЛЯ ВИЗУАЛИЗАЦИИ
+# ============================================================================
+
+class VisualizationModule:
+    """
+    Создает различные типы визуализаций для кластеризации и классификации.
+    """
+    
+    @staticmethod
+    def create_dendrogram(clusterer: HierarchicalClusterer) -> go.Figure:
+        """
+        Создает дендрограмму на основе иерархического кластера.
+        """
+        if not clusterer or not clusterer.root:
+            return go.Figure()
+        
+        # Получаем данные для дендрограммы
+        tree_data = clusterer.get_dendrogram_data()
+        
+        # Создаем граф для позиционирования
+        G = nx.DiGraph()
+        
+        # Добавляем узлы и связи
+        for node in tree_data["nodes"]:
+            G.add_node(node["id"], **node)
+        
+        for link in tree_data["links"]:
+            G.add_edge(link["source"], link["target"], weight=link["value"])
+        
+        # Используем иерархическое расположение
+        pos = nx.nx_agraph.graphviz_layout(G, prog="dot")
+        
+        # Создаем фигуру
+        fig = go.Figure()
+        
+        # Добавляем связи
+        edge_x = []
+        edge_y = []
+        
+        for edge in G.edges():
+            x0, y0 = pos[edge[0]]
+            x1, y1 = pos[edge[1]]
+            edge_x.extend([x0, x1, None])
+            edge_y.extend([y0, y1, None])
+        
+        fig.add_trace(go.Scatter(
+            x=edge_x, y=edge_y,
+            line=dict(width=0.5, color='#888'),
+            hoverinfo='none',
+            mode='lines'
+        ))
+        
+        # Добавляем узлы
+        node_x = []
+        node_y = []
+        node_text = []
+        node_size = []
+        node_color = []
+        
+        for node in G.nodes():
+            x, y = pos[node]
+            node_x.append(x)
+            node_y.append(y)
+            
+            node_data = G.nodes[node]
+            node_text.append(
+                f"<b>{node_data.get('name', 'Node')}</b><br>"
+                f"Level: {node_data.get('level', 0)}<br>"
+                f"Papers: {node_data.get('size', 0)}<br>"
+                f"DOIs: {node_data.get('doi_count', 0)}"
+            )
+            
+            # Размер узла зависит от количества работ
+            size = max(10, min(50, node_data.get('size', 0) / 10))
+            node_size.append(size)
+            
+            # Цвет зависит от уровня
+            level = node_data.get('level', 0)
+            colors = ['#2c3e50', '#3498db', '#2ecc71', '#e67e22', '#9b59b6', '#e74c3c']
+            node_color.append(colors[level % len(colors)])
+        
+        fig.add_trace(go.Scatter(
+            x=node_x, y=node_y,
+            mode='markers+text',
+            text=[G.nodes[n].get('name', '')[:20] for n in G.nodes()],
+            textposition="top center",
+            hovertext=node_text,
+            hoverinfo='text',
             marker=dict(
-                colors=px.colors.qualitative.Set3,
-                line=dict(color='white', width=2)
+                size=node_size,
+                color=node_color,
+                line=dict(color='white', width=1)
             )
+        ))
+        
+        fig.update_layout(
+            title="Hierarchical Cluster Dendrogram",
+            showlegend=False,
+            hovermode='closest',
+            xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            height=600,
+            margin=dict(l=20, r=20, t=40, b=20)
         )
-    ])
+        
+        return fig
     
-    fig.update_layout(
-        title={
-            'text': "Distribution of Papers by Category",
-            'x': 0.5,
-            'xanchor': 'center'
-        },
-        width=700,
-        height=500,
-        showlegend=True
-    )
+    @staticmethod
+    def create_category_pie_chart(stats_df: pd.DataFrame) -> go.Figure:
+        """
+        Создает круговую диаграмму распределения по категориям.
+        """
+        if stats_df.empty:
+            return go.Figure()
+        
+        # Фильтруем только категории с >0 papers
+        filtered_df = stats_df[stats_df["Papers"] > 0].copy()
+        
+        fig = go.Figure(data=[go.Pie(
+            labels=filtered_df["Category"],
+            values=filtered_df["Papers"],
+            hole=0.3,
+            marker=dict(
+                colors=filtered_df["Color"].tolist() if "Color" in filtered_df.columns else None,
+                line=dict(color='white', width=2)
+            ),
+            textinfo='label+percent',
+            textposition='auto',
+            hovertemplate="<b>%{label}</b><br>" +
+                         "Papers: %{value}<br>" +
+                         "Percentage: %{percent}<br>" +
+                         "<extra></extra>"
+        )])
+        
+        fig.update_layout(
+            title="Paper Distribution by Category",
+            height=400,
+            margin=dict(l=20, r=20, t=40, b=20)
+        )
+        
+        return fig
     
-    return fig
-
-def create_timeline_chart(classification_results: Dict[str, List[Dict]]) -> go.Figure:
-    """
-    Создает временную диаграмму публикаций по категориям
-    """
-    fig = go.Figure()
+    @staticmethod
+    def create_category_bar_chart(stats_df: pd.DataFrame) -> go.Figure:
+        """
+        Создает столбчатую диаграмму по категориям.
+        """
+        if stats_df.empty:
+            return go.Figure()
+        
+        # Фильтруем только категории с >0 papers
+        filtered_df = stats_df[stats_df["Papers"] > 0].copy()
+        
+        fig = go.Figure()
+        
+        # Добавляем столбцы для количества работ
+        fig.add_trace(go.Bar(
+            name="Papers",
+            x=filtered_df["Category"],
+            y=filtered_df["Papers"],
+            marker_color=filtered_df["Color"].tolist() if "Color" in filtered_df.columns else None,
+            text=filtered_df["Papers"],
+            textposition='auto',
+            hovertemplate="<b>%{x}</b><br>" +
+                         "Papers: %{y}<br>" +
+                         "Avg Citations: %{customdata[0]}<br>" +
+                         "Open Access: %{customdata[1]}<br>" +
+                         "<extra></extra>",
+            customdata=filtered_df[["Avg Citations", "Open Access"]].values
+        ))
+        
+        fig.update_layout(
+            title="Paper Count by Category",
+            xaxis_title="Category",
+            yaxis_title="Number of Papers",
+            height=400,
+            margin=dict(l=40, r=20, t=40, b=80),
+            xaxis=dict(tickangle=-45)
+        )
+        
+        return fig
     
-    colors = ['#3498DB', '#9B59B6', '#2ECC71', '#F39C12', '#E74C3C']
-    color_idx = 0
-    
-    for category, papers in classification_results.items():
-        if category != 'unclassified' and papers:
+    @staticmethod
+    def create_timeline_chart(classification: Dict[str, List[dict]]) -> go.Figure:
+        """
+        Создает временную шкалу публикаций по категориям.
+        """
+        if not classification:
+            return go.Figure()
+        
+        fig = go.Figure()
+        
+        # Собираем данные по годам для каждой категории
+        for cat_name, works in classification.items():
+            if cat_name == "Unclassified" or not works:
+                continue
+            
+            years = [w.get('publication_year') for w in works if w.get('publication_year')]
+            if not years:
+                continue
+            
             # Группируем по годам
             year_counts = {}
-            for paper in papers:
-                year = paper.get('publication_year', 0)
-                if year > 0:
-                    year_counts[year] = year_counts.get(year, 0) + 1
-            
-            if year_counts:
-                years = sorted(year_counts.keys())
-                counts = [year_counts[y] for y in years]
-                
-                fig.add_trace(go.Scatter(
-                    x=years,
-                    y=counts,
-                    mode='lines+markers',
-                    name=category,
-                    line=dict(color=colors[color_idx % len(colors)], width=3),
-                    marker=dict(size=8),
-                    hovertemplate='<b>%{text}</b><br>Year: %{x}<br>Papers: %{y}<extra></extra>',
-                    text=[category] * len(years)
-                ))
-                
-                color_idx += 1
-    
-    # Добавляем неклассифицированные
-    if classification_results.get('unclassified'):
-        year_counts = {}
-        for paper in classification_results['unclassified']:
-            year = paper.get('publication_year', 0)
-            if year > 0:
+            for year in years:
                 year_counts[year] = year_counts.get(year, 0) + 1
-        
-        if year_counts:
-            years = sorted(year_counts.keys())
-            counts = [year_counts[y] for y in years]
+            
+            years_sorted = sorted(year_counts.keys())
+            counts = [year_counts[y] for y in years_sorted]
             
             fig.add_trace(go.Scatter(
-                x=years,
+                name=cat_name,
+                x=years_sorted,
                 y=counts,
                 mode='lines+markers',
-                name='Unclassified',
-                line=dict(color='#95A5A6', width=2, dash='dash'),
-                marker=dict(size=6),
-                hovertemplate='<b>Unclassified</b><br>Year: %{x}<br>Papers: %{y}<extra></extra>'
+                stackgroup='one' if len(classification) > 1 else None,
+                line=dict(width=2),
+                hovertemplate="<b>%{legendtext}</b><br>" +
+                             "Year: %{x}<br>" +
+                             "Papers: %{y}<br>" +
+                             "<extra></extra>"
             ))
-    
-    fig.update_layout(
-        title={
-            'text': "Publication Timeline by Category",
-            'x': 0.5,
-            'xanchor': 'center'
-        },
-        xaxis_title="Year",
-        yaxis_title="Number of Papers",
-        hovermode='x unified',
-        width=900,
-        height=500,
-        legend=dict(
-            yanchor="top",
-            y=0.99,
-            xanchor="left",
-            x=0.01
+        
+        fig.update_layout(
+            title="Publication Timeline by Category",
+            xaxis_title="Year",
+            yaxis_title="Number of Papers",
+            height=400,
+            margin=dict(l=40, r=20, t=40, b=40),
+            hovermode='x unified'
         )
-    )
-    
-    return fig
-
-def create_network_graph(classification_results: Dict[str, List[Dict]]) -> go.Figure:
-    """
-    Создает графовую диаграмму связей между категориями и статьями
-    """
-    import networkx as nx
-    
-    G = nx.Graph()
-    
-    # Добавляем узлы категорий
-    category_nodes = []
-    for category, papers in classification_results.items():
-        if category != 'unclassified' and papers:
-            G.add_node(category, type='category', size=len(papers))
-            category_nodes.append(category)
-    
-    # Добавляем узлы статей и связи
-    paper_nodes = []
-    for category, papers in classification_results.items():
-        if category != 'unclassified':
-            for paper in papers[:10]:  # Ограничиваем для читаемости
-                paper_id = paper.get('doi', 'unknown')
-                if paper_id and paper_id not in paper_nodes:
-                    G.add_node(paper_id, type='paper', title=paper.get('title', '')[:30])
-                    G.add_edge(category, paper_id)
-                    paper_nodes.append(paper_id)
-    
-    # Позиционирование узлов
-    pos = nx.spring_layout(G, k=2, iterations=50)
-    
-    # Создаем следы для узлов
-    category_trace = go.Scatter(
-        x=[pos[node][0] for node in category_nodes],
-        y=[pos[node][1] for node in category_nodes],
-        mode='markers+text',
-        name='Categories',
-        text=category_nodes,
-        textposition="top center",
-        marker=dict(
-            size=[G.nodes[node]['size'] * 2 for node in category_nodes],
-            color='#9B59B6',
-            line=dict(color='white', width=2)
-        ),
-        hovertemplate='<b>%{text}</b><br>Papers: %{marker.size}<extra></extra>'
-    )
-    
-    paper_trace = go.Scatter(
-        x=[pos[node][0] for node in paper_nodes],
-        y=[pos[node][1] for node in paper_nodes],
-        mode='markers',
-        name='Papers',
-        text=[G.nodes[node].get('title', node[:10]) for node in paper_nodes],
-        marker=dict(
-            size=5,
-            color='#3498DB',
-            line=dict(color='white', width=1)
-        ),
-        hovertemplate='<b>%{text}</b><br>DOI: %{customdata}<extra></extra>',
-        customdata=[node for node in paper_nodes]
-    )
-    
-    # Создаем следы для ребер
-    edge_trace = go.Scatter(
-        x=[],
-        y=[],
-        mode='lines',
-        line=dict(color='#BDC3C7', width=0.5),
-        hoverinfo='none'
-    )
-    
-    for edge in G.edges():
-        x0, y0 = pos[edge[0]]
-        x1, y1 = pos[edge[1]]
-        edge_trace['x'] += (x0, x1, None)
-        edge_trace['y'] += (y0, y1, None)
-    
-    fig = go.Figure(data=[edge_trace, category_trace, paper_trace])
-    
-    fig.update_layout(
-        title={
-            'text': "Category-Paper Network Graph",
-            'x': 0.5,
-            'xanchor': 'center'
-        },
-        showlegend=True,
-        width=900,
-        height=600,
-        hovermode='closest',
-        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False)
-    )
-    
-    return fig
-
-# ============================================================================
-# НОВЫЕ ФУНКЦИИ ДЛЯ ЭКСПОРТА РЕЗУЛЬТАТОВ КЛАССИФИКАЦИИ
-# ============================================================================
-
-def export_classification_to_csv(classification_results: Dict[str, List[Dict]]) -> str:
-    """Экспортирует результаты классификации в CSV"""
-    rows = []
-    
-    for category, papers in classification_results.items():
-        for paper in papers:
-            rows.append({
-                'Category': category,
-                'Title': paper.get('title', ''),
-                'DOI': paper.get('doi', ''),
-                'Year': paper.get('publication_year', ''),
-                'Citations': paper.get('cited_by_count', 0),
-                'Journal': paper.get('journal_name', ''),
-                'Authors': ', '.join(paper.get('authors', [])[:3]),
-                'Classification_Score': paper.get('classification_score', 0),
-                'Matched_Keywords': ', '.join(paper.get('matched_keywords', []))
-            })
-    
-    df = pd.DataFrame(rows)
-    return df.to_csv(index=False, encoding='utf-8-sig')
-
-def export_classification_to_excel(classification_results: Dict[str, List[Dict]]) -> bytes:
-    """Экспортирует результаты классификации в Excel с отдельными листами"""
-    output = io.BytesIO()
-    
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        # Создаем отдельный лист для каждой категории
-        for category, papers in classification_results.items():
-            if papers:
-                rows = []
-                for paper in papers:
-                    rows.append({
-                        'Title': paper.get('title', ''),
-                        'DOI': paper.get('doi', ''),
-                        'Year': paper.get('publication_year', ''),
-                        'Citations': paper.get('cited_by_count', 0),
-                        'Journal': paper.get('journal_name', ''),
-                        'Authors': ', '.join(paper.get('authors', [])[:3]),
-                        'Score': paper.get('classification_score', 0),
-                        'Keywords': ', '.join(paper.get('matched_keywords', []))
-                    })
-                
-                df = pd.DataFrame(rows)
-                sheet_name = category[:30]  # Ограничиваем длину имени листа
-                df.to_excel(writer, sheet_name=sheet_name, index=False)
-                
-                # Форматирование
-                workbook = writer.book
-                worksheet = writer.sheets[sheet_name]
-                
-                header_format = workbook.add_format({
-                    'bold': True,
-                    'bg_color': '#9B59B6',
-                    'font_color': 'white',
-                    'border': 1
-                })
-                
-                for col_num, value in enumerate(df.columns.values):
-                    worksheet.write(0, col_num, value, header_format)
-                    column_len = max(df[value].astype(str).map(len).max(), len(value)) + 2
-                    worksheet.set_column(col_num, col_num, min(column_len, 50))
         
-        # Создаем сводный лист со статистикой
-        stats_data = []
-        for category, papers in classification_results.items():
-            if papers:
-                years = [p.get('publication_year', 0) for p in papers if p.get('publication_year')]
-                citations = [p.get('cited_by_count', 0) for p in papers]
-                
-                stats_data.append({
-                    'Category': category,
-                    'Papers': len(papers),
-                    'Avg Year': np.mean(years) if years else 0,
-                    'Min Year': min(years) if years else 0,
-                    'Max Year': max(years) if years else 0,
-                    'Avg Citations': np.mean(citations) if citations else 0,
-                    'Total Citations': sum(citations)
-                })
-        
-        if stats_data:
-            stats_df = pd.DataFrame(stats_data)
-            stats_df.to_excel(writer, sheet_name='Summary', index=False)
+        return fig
     
-    return output.getvalue()
+    @staticmethod
+    def create_citation_boxplot(classification: Dict[str, List[dict]]) -> go.Figure:
+        """
+        Создает box plot распределения цитирований по категориям.
+        """
+        if not classification:
+            return go.Figure()
+        
+        fig = go.Figure()
+        
+        for cat_name, works in classification.items():
+            if cat_name == "Unclassified" or not works:
+                continue
+            
+            citations = [w.get('cited_by_count', 0) for w in works]
+            
+            fig.add_trace(go.Box(
+                name=cat_name,
+                y=citations,
+                boxmean='sd',
+                hovertemplate="<b>%{x}</b><br>" +
+                             "Median: %{median}<br>" +
+                             "Q1: %{q1}<br>" +
+                             "Q3: %{q3}<br>" +
+                             "<extra></extra>"
+            ))
+        
+        fig.update_layout(
+            title="Citation Distribution by Category",
+            yaxis_title="Number of Citations",
+            height=400,
+            margin=dict(l=40, r=20, t=40, b=80),
+            xaxis=dict(tickangle=-45)
+        )
+        
+        return fig
+    
+    @staticmethod
+    def create_heatmap(clusterer: HierarchicalClusterer) -> go.Figure:
+        """
+        Создает тепловую карту пересечений категорий.
+        """
+        if not clusterer or not clusterer.root:
+            return go.Figure()
+        
+        # Собираем все листовые узлы
+        leaf_nodes = clusterer.root.get_leaf_nodes()
+        
+        if len(leaf_nodes) < 2:
+            return go.Figure()
+        
+        # Создаем матрицу пересечений
+        n_nodes = len(leaf_nodes)
+        intersection_matrix = np.zeros((n_nodes, n_nodes))
+        
+        node_names = [node.name[:20] for node in leaf_nodes]
+        
+        # Вычисляем пересечения по DOI
+        for i in range(n_nodes):
+            for j in range(n_nodes):
+                if i != j:
+                    doi_i = set(leaf_nodes[i].dois)
+                    doi_j = set(leaf_nodes[j].dois)
+                    intersection = len(doi_i.intersection(doi_j))
+                    union = len(doi_i.union(doi_j))
+                    
+                    if union > 0:
+                        intersection_matrix[i][j] = intersection / union
+        
+        fig = go.Figure(data=go.Heatmap(
+            z=intersection_matrix,
+            x=node_names,
+            y=node_names,
+            colorscale='Viridis',
+            hoverongaps=False,
+            hovertemplate="<b>%{x}</b> vs <b>%{y}</b><br>" +
+                         "Similarity: %{z:.2f}<br>" +
+                         "<extra></extra>"
+        ))
+        
+        fig.update_layout(
+            title="Cluster Intersection Heatmap",
+            height=500,
+            margin=dict(l=100, r=20, t=40, b=100),
+            xaxis=dict(tickangle=-45)
+        )
+        
+        return fig
+    
+    @staticmethod
+    def create_wordcloud(category_name: str, works: List[dict]) -> plt.Figure:
+        """
+        Создает облако слов для категории.
+        """
+        if not works:
+            return plt.Figure()
+        
+        # Собираем текст из заголовков
+        text = " ".join([w.get('title', '') for w in works if w.get('title')])
+        
+        # Создаем облако слов
+        wordcloud = WordCloud(
+            width=800, height=400,
+            background_color='white',
+            max_words=100,
+            colormap='viridis'
+        ).generate(text.lower())
+        
+        # Создаем фигуру matplotlib
+        fig, ax = plt.subplots(figsize=(10, 5))
+        ax.imshow(wordcloud, interpolation='bilinear')
+        ax.axis('off')
+        ax.set_title(f'Word Cloud - {category_name}', fontsize=16)
+        
+        return fig
+    
+    @staticmethod
+    def create_hierarchy_view(clusterer: HierarchicalClusterer) -> str:
+        """
+        Создает текстовое представление иерархии.
+        """
+        if not clusterer or not clusterer.root:
+            return "No hierarchy data"
+        
+        lines = []
+        
+        def traverse(node: HierarchicalClusterNode, prefix: str = "", is_last: bool = True):
+            # Добавляем текущий узел
+            marker = "└── " if is_last else "├── "
+            count_info = f" [{node.work_count} papers, {len(node.dois)} DOIs]"
+            lines.append(f"{prefix}{marker}{node.name}{count_info}")
+            
+            # Обновляем префикс для детей
+            new_prefix = prefix + ("    " if is_last else "│   ")
+            
+            # Обрабатываем детей
+            for i, child in enumerate(node.children):
+                is_child_last = (i == len(node.children) - 1)
+                traverse(child, new_prefix, is_child_last)
+        
+        traverse(clusterer.root)
+        
+        return "\n".join(lines)
+
 
 # ============================================================================
-# НОВЫЕ ШАГИ ИНТЕРФЕЙСА ДЛЯ ИЕРАРХИЧЕСКОЙ КЛАССИФИКАЦИИ
+# НОВЫЙ ИНТЕРФЕЙС ДЛЯ КЛАСТЕРИЗАЦИИ И КЛАССИФИКАЦИИ
 # ============================================================================
 
-def step_hierarchical_filters():
-    """Шаг 1: Определение иерархии фильтров"""
+def hierarchical_clustering_interface():
+    """
+    Интерфейс для настройки иерархической кластеризации.
+    """
     st.markdown("""
-    <div class="step-card">
-        <h3 style="margin: 0; font-size: 1.3rem;">🌲 Step 1: Define Search Hierarchy</h3>
-        <p style="margin: 5px 0; font-size: 0.9rem;">Set up to 4 levels of filtering with AND/OR logic.</p>
+    <div class="filter-section">
+        <div class="filter-header">🌳 Hierarchical Clustering Setup</div>
     </div>
     """, unsafe_allow_html=True)
     
-    # Инициализация состояния для иерархических фильтров
-    if 'hierarchical_levels' not in st.session_state:
-        st.session_state.hierarchical_levels = []
+    # Инициализация состояния
+    if 'cluster_levels' not in st.session_state:
+        st.session_state.cluster_levels = 3
     
-    if 'year_filter_obj' not in st.session_state:
-        st.session_state.year_filter_obj = YearFilter()
+    if 'cluster_filters' not in st.session_state:
+        st.session_state.cluster_filters = [""] * 4
     
-    # Выбор количества уровней
-    num_levels = st.number_input("Number of filter levels", min_value=1, max_value=4, value=1, key="num_levels")
+    if 'years_filter' not in st.session_state:
+        st.session_state.years_filter = ""
     
-    level_filters = []
+    # Количество уровней
+    st.session_state.cluster_levels = st.number_input(
+        "Number of hierarchical levels (1-4)",
+        min_value=1, max_value=4, value=st.session_state.cluster_levels,
+        help="Define how many levels of filtering to apply"
+    )
     
-    for i in range(num_levels):
-        with st.expander(f"Level {i+1}", expanded=i==0):
+    # Ввод фильтров для каждого уровня
+    st.markdown("### 🔍 Level Filters")
+    st.markdown("""
+    <div class="info-message">
+        <small>Use parentheses for complex queries. Examples:<br>
+        • Simple: "SOFC"<br>
+        • AND: "(SOFC and PCFC)"<br>
+        • OR: "(SOFC or PCFC)"<br>
+        • Nested: "(SOFC and (PCFC or SOFC-H))"</small>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    for level in range(1, st.session_state.cluster_levels + 1):
+        st.session_state.cluster_filters[level-1] = st.text_input(
+            f"Level {level} filter",
+            value=st.session_state.cluster_filters[level-1],
+            placeholder=f"e.g., SOFC or (SOFC and PCFC)",
+            key=f"cluster_filter_{level}"
+        )
+    
+    # Фильтр по годам
+    st.markdown("### 📅 Year Filter")
+    st.markdown("""
+    <div class="info-message">
+        <small>Examples:<br>
+        • Single year: "2020"<br>
+        • Range: "2020-2025"<br>
+        • Multiple: "2020,2022,2024"<br>
+        • Mixed: "2020,2022-2025"</small>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.session_state.years_filter = st.text_input(
+        "Publication years",
+        value=st.session_state.years_filter,
+        placeholder="e.g., 2020-2025",
+        key="years_filter_input"
+    )
+    
+    # Дополнительные настройки
+    with st.expander("⚙️ Advanced Settings"):
+        st.session_state.max_works_per_level = st.number_input(
+            "Max works per level",
+            min_value=100, max_value=10000, value=2000,
+            help="Maximum number of papers to fetch per level"
+        )
+        
+        st.session_state.include_abstracts = st.checkbox(
+            "Search in abstracts", value=True,
+            help="Include abstracts in text analysis"
+        )
+        
+        st.session_state.use_concepts = st.checkbox(
+            "Use OpenAlex concepts", value=False,
+            help="Use concept-based clustering instead of keywords"
+        )
+    
+    # Кнопка запуска кластеризации
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        if st.button("🌳 Build Hierarchical Tree", type="primary", use_container_width=True):
+            # Проверяем, что есть хотя бы один фильтр
+            valid_filters = [f for f in st.session_state.cluster_filters[:st.session_state.cluster_levels] if f.strip()]
+            
+            if not valid_filters:
+                st.error("Please enter at least one filter term")
+                return
+            
+            # Создаем query builder
+            query_builder = OpenAlexQueryBuilder()
+            
+            # Добавляем фильтры
+            for level, filter_term in enumerate(valid_filters, 1):
+                query_builder.add_level_filter(filter_term, level)
+            
+            # Добавляем фильтр по годам
+            if st.session_state.years_filter:
+                query_builder.parse_years(st.session_state.years_filter)
+            
+            # Сохраняем в сессию
+            st.session_state.query_builder = query_builder
+            st.session_state.active_filters = valid_filters
+            
+            # Переходим к результатам кластеризации
+            st.session_state.current_step = 6  # Новый шаг для кластеризации
+            st.rerun()
+
+
+def classification_interface():
+    """
+    Интерфейс для настройки классификации после фильтрации.
+    """
+    st.markdown("""
+    <div class="filter-section">
+        <div class="filter-header">📊 Classification Setup</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Инициализация состояния
+    if 'num_categories' not in st.session_state:
+        st.session_state.num_categories = 4
+    
+    if 'categories_config' not in st.session_state:
+        st.session_state.categories_config = []
+    
+    # Количество категорий
+    st.session_state.num_categories = st.number_input(
+        "Number of categories",
+        min_value=1, max_value=10, value=st.session_state.num_categories,
+        help="Define how many categories for classification"
+    )
+    
+    # Динамическое создание категорий
+    st.session_state.categories_config = []
+    
+    for i in range(st.session_state.num_categories):
+        with st.expander(f"Category {i+1}", expanded=i==0):
             col1, col2 = st.columns([3, 1])
             
             with col1:
-                query = st.text_input(
-                    f"Search terms for level {i+1}",
-                    key=f"hier_level_{i}",
-                    placeholder="Example: 'SOFC' or 'SOFC and PCFC' or 'SOFC or PCFC'",
-                    help="Use AND/OR/NOT operators"
+                name = st.text_input(
+                    "Category name",
+                    key=f"cat_name_{i}",
+                    placeholder="e.g., Co-free"
                 )
             
             with col2:
-                logic = st.selectbox(
-                    "Logic",
-                    options=["AND", "OR"],
-                    index=0,
-                    key=f"hier_logic_{i}"
+                color = st.color_picker(
+                    "Color",
+                    value=["#3498db", "#2ecc71", "#e67e22", "#9b59b6", 
+                           "#e74c3c", "#1abc9c", "#f39c12", "#d35400",
+                           "#c0392b", "#16a085"][i % 10],
+                    key=f"cat_color_{i}"
                 )
             
-            field = st.radio(
-                "Search in",
-                options=["title_and_abstract", "title", "abstract"],
+            logic = st.radio(
+                "Logic between terms",
+                ["OR", "AND"],
                 horizontal=True,
-                key=f"hier_field_{i}"
+                key=f"cat_logic_{i}"
             )
             
-            if query:
-                level = FilterLevel(level_num=i+1, query=query, logic=LogicOperator(logic))
-                # Обновляем поле поиска для каждого термина
-                for term in level.terms:
-                    term.field = field
-                level_filters.append(level)
-    
-    st.markdown("### 📅 Publication Years")
-    
-    years_input = st.text_input(
-        "Years (e.g., '2000,2021' or '2020-2026' or '2021,2023-2025')",
-        key="hier_years_input",
-        placeholder="2020-2024"
-    )
-    
-    if years_input:
-        year_filter = YearFilter()
-        year_filter.parse_years_string(years_input)
-        st.session_state.year_filter_obj = year_filter
-        
-        # Показываем распарсенные года
-        if year_filter.years:
-            st.markdown(f"Selected years: {', '.join(map(str, year_filter.years))}")
-        if year_filter.ranges:
-            ranges_str = [f"{start}-{end}" for start, end in year_filter.ranges]
-            st.markdown(f"Selected ranges: {', '.join(ranges_str)}")
-    
-    # Сохраняем фильтры в сессии
-    if level_filters:
-        st.session_state.hierarchical_levels = level_filters
-        
-        st.markdown("---")
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            if st.button("🔍 Start Hierarchical Search", type="primary", use_container_width=True, key="start_hier_search"):
-                st.session_state.current_step = 6  # Новый шаг для результатов иерархического поиска
-                st.rerun()
-
-def step_define_classification():
-    """Шаг 2: Определение категорий классификации"""
-    st.markdown("""
-    <div class="step-card">
-        <h3 style="margin: 0; font-size: 1.3rem;">📊 Step 2: Define Classification Categories</h3>
-        <p style="margin: 5px 0; font-size: 0.9rem;">Set up categories and keywords for paper classification.</p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Предопределенные категории для примера
-    default_categories = {
-        "Co-free": ["co-free", "cobalt-free", "without cobalt", "co free", "cobalt free"],
-        "Ba-free": ["ba-free", "barium-free", "without barium", "ba free", "barium free"],
-        "perovskite": ["perovskite", "perovskite-type", "perovskite structure", "perovskite oxide"],
-        "perovskite-free": ["perovskite-free", "perovskite free", "non-perovskite"],
-        "triple-conducting": ["triple conducting", "triple conductor", "htc", "h+ conductor", "proton conductor", "mixed conductor"],
-        "double-perovskite": ["double perovskite", "layered perovskite", "a2bb'o6"],
-        "Ruddlesden-Popper": ["ruddlesden-popper", "rp phase", "layered perovskite", "k2nif4"],
-        "electrolyte": ["electrolyte", "solid electrolyte", "ionic conductor"],
-        "anode": ["anode", "fuel electrode", "anode material"],
-        "cathode": ["cathode", "air electrode", "cathode material"]
-    }
-    
-    # Инициализация правил классификации
-    if 'classification_rules' not in st.session_state:
-        st.session_state.classification_rules = {}
-    
-    st.markdown("### Add/Edit Categories")
-    
-    # Выбор предопределенной категории или создание новой
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        use_default = st.checkbox("Use default categories", value=True)
-    
-    if use_default:
-        selected_categories = st.multiselect(
-            "Select categories",
-            options=list(default_categories.keys()),
-            default=["Co-free", "Ba-free", "perovskite", "triple-conducting"]
-        )
-        
-        # Загружаем выбранные категории
-        rules = {}
-        for category in selected_categories:
-            rules[category] = ClassificationRule(category, default_categories[category])
-        
-        st.session_state.classification_rules = rules
-        
-        # Показываем выбранные категории
-        st.markdown("### Selected Categories")
-        for category in selected_categories:
-            with st.expander(f"📌 {category}", expanded=False):
-                st.markdown(f"**Keywords:** {', '.join(default_categories[category])}")
-    
-    else:
-        # Ручное добавление категорий
-        with st.form("add_category_form"):
-            category_name = st.text_input("Category name")
-            keywords = st.text_area("Keywords (one per line)", height=100, 
-                                   placeholder="co-free\ncobalt-free\nwithout co")
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                case_sensitive = st.checkbox("Case sensitive")
-            
-            with col2:
-                submitted = st.form_submit_button("Add Category")
-            
-            if submitted and category_name and keywords:
-                keyword_list = [k.strip() for k in keywords.split('\n') if k.strip()]
-                if category_name not in st.session_state.classification_rules:
-                    st.session_state.classification_rules[category_name] = ClassificationRule(
-                        category_name, keyword_list, case_sensitive
-                    )
-                    st.success(f"Added category: {category_name}")
-                    st.rerun()
-        
-        # Показываем текущие категории
-        if st.session_state.classification_rules:
-            st.markdown("### Current Categories")
-            for category, rule in st.session_state.classification_rules.items():
-                with st.expander(f"📌 {category}", expanded=False):
-                    st.markdown(f"**Keywords:** {', '.join(rule.keywords)}")
-                    st.markdown(f"**Case sensitive:** {rule.case_sensitive}")
-                    
-                    if st.button(f"Remove {category}", key=f"remove_{category}"):
-                        del st.session_state.classification_rules[category]
-                        st.rerun()
-    
-    # Кнопка продолжения
-    if st.session_state.classification_rules:
-        st.markdown("---")
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            if st.button("🔬 Run Classification", type="primary", use_container_width=True, key="run_classification"):
-                st.session_state.current_step = 7  # Новый шаг для результатов классификации
-                st.rerun()
-
-def step_hierarchical_results():
-    """Шаг 6: Результаты иерархического поиска"""
-    st.markdown("""
-    <div class="step-card">
-        <h3 style="margin: 0; font-size: 1.3rem;">🌳 Step 6: Hierarchical Search Results</h3>
-        <p style="margin: 5px 0; font-size: 0.9rem;">Papers found with multi-level filtering.</p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    if 'hierarchical_levels' not in st.session_state or not st.session_state.hierarchical_levels:
-        st.error("❌ No hierarchical filters defined. Please go back to Step 1.")
-        return
-    
-    if 'hier_search_results' not in st.session_state:
-        with st.spinner("Executing hierarchical search with server-side filtering..."):
-            # Выполняем поиск
-            papers = optimize_multi_level_query(
-                level_filters=st.session_state.hierarchical_levels,
-                years_filter=st.session_state.year_filter_obj,
-                max_results=5000
+            terms = st.text_area(
+                "Search terms (one per line)",
+                key=f"cat_terms_{i}`",
+                height=80,
+                placeholder="cobalt-free\nwithout cobalt\nCo-free"
             )
             
-            # Обогащаем данные
-            enriched_papers = []
-            for paper in papers:
-                enriched = enrich_work_data(paper)
-                enriched_papers.append(enriched)
+            description = st.text_input(
+                "Description (optional)",
+                key=f"cat_desc_{i}",
+                placeholder=f"Papers about {name if name else 'this topic'}"
+            )
             
-            st.session_state.hier_search_results = enriched_papers
+            if name and terms:
+                st.session_state.categories_config.append({
+                    "name": name,
+                    "color": color,
+                    "logic": logic,
+                    "terms": [t.strip() for t in terms.split('\n') if t.strip()],
+                    "description": description
+                })
     
-    papers = st.session_state.hier_search_results
-    
-    # Статистика
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric("Total Papers Found", len(papers))
-    
+    # Кнопка запуска классификации
+    col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        years = [p.get('publication_year', 0) for p in papers if p.get('publication_year')]
-        if years:
-            st.metric("Year Range", f"{min(years)}-{max(years)}")
-        else:
-            st.metric("Year Range", "N/A")
-    
-    with col3:
-        citations = [p.get('cited_by_count', 0) for p in papers]
-        st.metric("Avg Citations", f"{np.mean(citations):.1f}" if citations else "0")
-    
-    with col4:
-        oa_count = sum(1 for p in papers if p.get('is_oa'))
-        st.metric("Open Access", f"{oa_count} ({oa_count/len(papers)*100:.1f}%)" if papers else "0")
-    
-    # Показываем примененные фильтры
-    st.markdown("### Applied Filters")
-    filter_display = []
-    for level in st.session_state.hierarchical_levels:
-        filter_display.append(f"Level {level.level_num}: {level.query} ({level.logic.value})")
-    
-    if st.session_state.year_filter_obj.years or st.session_state.year_filter_obj.ranges:
-        year_str = st.session_state.year_filter_obj.to_openalex_filter()
-        filter_display.append(f"Years: {year_str}")
-    
-    st.markdown(" • " + " • ".join(filter_display))
-    
-    # Показываем результаты
-    st.markdown("### Papers Found")
-    
-    # Создаем DataFrame для отображения
-    display_data = []
-    for i, paper in enumerate(papers[:50], 1):
-        display_data.append({
-            '#': i,
-            'Title': paper.get('title', '')[:80] + '...' if len(paper.get('title', '')) > 80 else paper.get('title', ''),
-            'Year': paper.get('publication_year', ''),
-            'Citations': paper.get('cited_by_count', 0),
-            'Authors': ', '.join(paper.get('authors', [])[:2]),
-            'DOI': paper.get('doi', ''),
-            'Journal': paper.get('journal_name', '')[:30]
-        })
-    
-    df = pd.DataFrame(display_data)
-    st.dataframe(df, use_container_width=True, height=400)
-    
-    # Экспорт
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        csv_data = pd.DataFrame(papers).to_csv(index=False, encoding='utf-8-sig')
-        st.download_button(
-            label="📥 Download CSV",
-            data=csv_data,
-            file_name=f"hierarchical_search_results.csv",
-            mime="text/csv",
-            use_container_width=True
-        )
-    
-    with col2:
-        if st.button("📊 Continue to Classification", use_container_width=True, type="primary"):
-            st.session_state.papers_for_classification = papers
-            st.session_state.current_step = 2  # Переходим к шагу определения классификации
+        if st.button("📊 Run Classification", type="primary", use_container_width=True):
+            if not st.session_state.categories_config:
+                st.error("Please configure at least one category")
+                return
+            
+            # Получаем работы для классификации
+            if 'clusterer' in st.session_state:
+                # Используем работы из кластеризации
+                works = st.session_state.clusterer.root.get_all_works() if st.session_state.clusterer.root else []
+            elif 'filtered_works' in st.session_state:
+                # Используем отфильтрованные работы
+                works = st.session_state.filtered_works
+            else:
+                st.error("No works available for classification. Please run clustering first.")
+                return
+            
+            if not works:
+                st.error("No works found to classify")
+                return
+            
+            # Создаем классификатор
+            classifier = CategoryClassifier()
+            
+            for cat_config in st.session_state.categories_config:
+                classifier.add_category(
+                    name=cat_config["name"],
+                    terms=cat_config["terms"],
+                    logic=cat_config["logic"],
+                    description=cat_config.get("description", ""),
+                    color=cat_config.get("color")
+                )
+            
+            # Выполняем классификацию
+            with st.spinner("Classifying papers..."):
+                classification = classifier.classify_works(works)
+            
+            # Сохраняем результаты
+            st.session_state.classifier = classifier
+            st.session_state.classification = classification
+            
+            # Переходим к результатам классификации
+            st.session_state.current_step = 7  # Новый шаг для классификации
             st.rerun()
 
-def step_classification_results():
-    """Шаг 7: Результаты классификации с визуализациями"""
+
+def step_clustering_results():
+    """
+    Шаг 6: Результаты кластеризации.
+    """
+    create_back_button()
+    
     st.markdown("""
     <div class="step-card">
-        <h3 style="margin: 0; font-size: 1.3rem;">📈 Step 7: Classification Results</h3>
-        <p style="margin: 5px 0; font-size: 0.9rem;">Papers classified into categories with interactive visualizations.</p>
+        <h3 style="margin: 0; font-size: 1.3rem;">🌳 Step 6: Hierarchical Clustering Results</h3>
+        <p style="margin: 5px 0; font-size: 0.9rem;">Visualization of the hierarchical tree structure.</p>
     </div>
     """, unsafe_allow_html=True)
     
-    if 'classification_rules' not in st.session_state or not st.session_state.classification_rules:
-        st.error("❌ No classification rules defined. Please go back to Step 2.")
+    if 'query_builder' not in st.session_state or 'active_filters' not in st.session_state:
+        st.error("No clustering data available. Please go back to Step 6.")
         return
     
-    # Определяем источник данных
-    if 'papers_for_classification' in st.session_state:
-        papers = st.session_state.papers_for_classification
-    elif 'hier_search_results' in st.session_state:
-        papers = st.session_state.hier_search_results
-    else:
-        st.error("❌ No papers to classify. Please run a search first.")
-        return
-    
-    if 'classification_results' not in st.session_state:
-        with st.spinner("Classifying papers..."):
-            classifier = PaperClassifier(st.session_state.classification_rules)
-            classification_results = classifier.classify_papers_batch(papers)
-            st.session_state.classification_results = classification_results
+    # Создаем кластеризатор, если его еще нет
+    if 'clusterer' not in st.session_state:
+        with st.spinner("Building hierarchical tree..."):
+            clusterer = HierarchicalClusterer(st.session_state.query_builder)
             
-            # Строим иерархическое дерево
-            hierarchy_tree = HierarchyNode("Root", "root")
-            level_names = [f"Level {i+1}" for i in range(len(st.session_state.get('hierarchical_levels', [])))]
-            st.session_state.hierarchy_tree = hierarchy_tree.build_tree(
-                classification_results, 
-                level_names if level_names else None
+            # Строим дерево
+            root = clusterer.build_tree(
+                filters=st.session_state.active_filters,
+                years_filter=st.session_state.years_filter,
+                max_works_per_level=st.session_state.get('max_works_per_level', 2000)
             )
+            
+            st.session_state.clusterer = clusterer
     
-    classification_results = st.session_state.classification_results
-    hierarchy_tree = st.session_state.hierarchy_tree
+    clusterer = st.session_state.clusterer
     
-    # Статистика классификации
-    st.markdown("### Classification Summary")
+    # Статистика
+    st.markdown("### 📊 Cluster Statistics")
     
     col1, col2, col3, col4 = st.columns(4)
-    
     with col1:
-        total_classified = sum(len(papers) for cat, papers in classification_results.items() if cat != 'unclassified')
-        st.metric("Classified Papers", total_classified)
-    
+        total_works = len(clusterer.root.get_all_works()) if clusterer.root else 0
+        create_metric_card_compact("Total Papers", f"{total_works:,}", "📄")
     with col2:
-        unclassified = len(classification_results.get('unclassified', []))
-        st.metric("Unclassified", unclassified)
-    
+        total_nodes = sum(len(nodes) for nodes in clusterer.nodes_by_level.values())
+        create_metric_card_compact("Total Clusters", total_nodes, "🌳")
     with col3:
-        categories = [cat for cat in classification_results.keys() if cat != 'unclassified' and classification_results[cat]]
-        st.metric("Categories with Papers", len(categories))
-    
+        max_depth = clusterer.root.get_depth() if clusterer.root else 0
+        create_metric_card_compact("Max Depth", max_depth, "📏")
     with col4:
-        coverage = (total_classified / len(papers)) * 100 if papers else 0
-        st.metric("Coverage", f"{coverage:.1f}%")
+        leaf_nodes = len(clusterer.root.get_leaf_nodes()) if clusterer.root else 0
+        create_metric_card_compact("Leaf Nodes", leaf_nodes, "🍃")
     
-    # Таблица с количеством статей по категориям
-    st.markdown("### Papers per Category")
-    
-    category_stats = []
-    for category, cat_papers in classification_results.items():
-        if category != 'unclassified' and cat_papers:
-            years = [p.get('publication_year', 0) for p in cat_papers if p.get('publication_year')]
-            citations = [p.get('cited_by_count', 0) for p in cat_papers]
-            
-            category_stats.append({
-                'Category': category,
-                'Papers': len(cat_papers),
-                'Avg Year': f"{np.mean(years):.1f}" if years else "N/A",
-                'Avg Citations': f"{np.mean(citations):.1f}" if citations else "0",
-                'Recent (≤2y)': sum(1 for p in cat_papers if p.get('publication_year', 0) >= datetime.now().year - 2)
-            })
-    
-    if category_stats:
-        stats_df = pd.DataFrame(category_stats)
-        st.dataframe(stats_df, use_container_width=True, hide_index=True)
+    # Таблица статистики
+    stats_df = clusterer.get_cluster_statistics()
+    if not stats_df.empty:
+        st.dataframe(stats_df, use_container_width=True, height=200)
     
     # Визуализации
-    st.markdown("### Visualizations")
+    tab1, tab2, tab3, tab4 = st.tabs(["🌳 Dendrogram", "📊 Heatmap", "📈 Hierarchy View", "📋 Details"])
     
-    # Создаем табы для разных типов визуализаций
+    with tab1:
+        st.markdown("### Dendrogram Visualization")
+        fig = VisualizationModule.create_dendrogram(clusterer)
+        st.plotly_chart(fig, use_container_width=True)
+        
+        st.markdown("""
+        <div class="info-message">
+            <small>• Node size represents number of papers<br>
+            • Color indicates hierarchy level<br>
+            • Hover over nodes for details<br>
+            • Click on nodes to expand/collapse</small>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with tab2:
+        st.markdown("### Cluster Intersection Heatmap")
+        fig = VisualizationModule.create_heatmap(clusterer)
+        if fig.data:
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Not enough clusters for heatmap visualization (need at least 2)")
+    
+    with tab3:
+        st.markdown("### Text Hierarchy View")
+        hierarchy_text = VisualizationModule.create_hierarchy_view(clusterer)
+        st.text_area("Hierarchy", hierarchy_text, height=400, disabled=True)
+        
+        # Кнопка копирования
+        if st.button("📋 Copy to Clipboard"):
+            st.write(hierarchy_text)
+            st.success("Copied to clipboard!")
+    
+    with tab4:
+        st.markdown("### Detailed Cluster Information")
+        
+        # Выбор кластера для детального просмотра
+        if clusterer.root:
+            # Собираем все узлы
+            all_nodes = []
+            
+            def collect_nodes(node):
+                all_nodes.append(node)
+                for child in node.children:
+                    collect_nodes(child)
+            
+            collect_nodes(clusterer.root)
+            
+            # Создаем список для выбора
+            node_options = {f"{node.name} (Level {node.level}, {node.work_count} papers)": node 
+                          for node in all_nodes}
+            
+            selected_node_name = st.selectbox(
+                "Select cluster to view details",
+                options=list(node_options.keys())
+            )
+            
+            if selected_node_name:
+                selected_node = node_options[selected_node_name]
+                
+                # Отображаем информацию о кластере
+                st.markdown(f"""
+                <div class="cluster-node">
+                    <h4>{selected_node.name}</h4>
+                    <p><strong>Level:</strong> {selected_node.level}</p>
+                    <p><strong>Filter:</strong> {selected_node.filter_term}</p>
+                    <p><strong>Papers:</strong> {selected_node.work_count}</p>
+                    <p><strong>DOIs:</strong> {len(selected_node.dois)}</p>
+                    <p><strong>Children:</strong> {len(selected_node.children)}</p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Показываем примеры DOI
+                if selected_node.dois:
+                    st.markdown("**Sample DOIs:**")
+                    for doi in selected_node.dois[:10]:
+                        st.markdown(f"- [{doi}](https://doi.org/{doi})")
+                    
+                    if len(selected_node.dois) > 10:
+                        st.markdown(f"*... and {len(selected_node.dois) - 10} more*")
+    
+    # Кнопка перехода к классификации
+    st.markdown("---")
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        if st.button("📊 Proceed to Classification", type="primary", use_container_width=True):
+            st.session_state.current_step = 7
+            st.rerun()
+
+
+def step_classification_results():
+    """
+    Шаг 7: Результаты классификации.
+    """
+    create_back_button()
+    
+    st.markdown("""
+    <div class="step-card">
+        <h3 style="margin: 0; font-size: 1.3rem;">📊 Step 7: Classification Results</h3>
+        <p style="margin: 5px 0; font-size: 0.9rem;">Papers categorized by your defined categories.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    if 'classifier' not in st.session_state or 'classification' not in st.session_state:
+        st.error("No classification data available. Please run classification first.")
+        
+        # Кнопка для запуска классификации
+        if st.button("📊 Go to Classification Setup"):
+            st.session_state.current_step = 6
+            st.rerun()
+        return
+    
+    classifier = st.session_state.classifier
+    classification = st.session_state.classification
+    
+    # Статистика
+    stats_df = classifier.get_statistics(classification)
+    
+    if stats_df.empty:
+        st.warning("No classification statistics available")
+        return
+    
+    # Общая статистика
+    total_papers = sum(len(works) for works in classification.values())
+    
+    st.markdown(f"""
+    <div class="filter-stats">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <strong>📊 Classification Summary</strong><br>
+                <span style="font-size: 0.9rem; color: #666;">
+                    {len([c for c in classification.keys() if c != "Unclassified"])} categories defined
+                </span>
+            </div>
+            <div style="text-align: right;">
+                <span style="font-size: 1.5rem; font-weight: 700; color: #667eea;">{total_papers:,}</span><br>
+                <span style="font-size: 0.8rem; color: #666;">total papers classified</span>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Визуализации в табах
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "🌳 Tree Map", "☀️ Sunburst", "📊 Bar Chart", "🥧 Pie Chart", "📈 Timeline"
+        "📊 Overview", "🥧 Pie Chart", "📈 Timeline", "📦 Box Plot", "🔍 Details"
     ])
     
     with tab1:
-        fig_tree = create_dendrogram(hierarchy_tree)
-        st.plotly_chart(fig_tree, use_container_width=True)
+        st.markdown("### Category Statistics")
+        st.dataframe(stats_df, use_container_width=True)
         
-        # Пояснение
-        st.info("🌳 **Tree Map**: Hierarchical view of categories and papers. Size represents number of papers. Click on nodes to drill down.")
+        # Столбчатая диаграмма
+        fig = VisualizationModule.create_category_bar_chart(stats_df)
+        st.plotly_chart(fig, use_container_width=True)
     
     with tab2:
-        fig_sunburst = create_sunburst_chart(hierarchy_tree)
-        st.plotly_chart(fig_sunburst, use_container_width=True)
-        
-        st.info("☀️ **Sunburst Chart**: Radial hierarchy showing category distribution. Inner rings are higher levels.")
+        st.markdown("### Distribution Pie Chart")
+        fig = VisualizationModule.create_category_pie_chart(stats_df)
+        st.plotly_chart(fig, use_container_width=True)
     
     with tab3:
-        fig_bar = create_category_bar_chart(classification_results)
-        st.plotly_chart(fig_bar, use_container_width=True)
-        
-        st.info("📊 **Bar Chart**: Simple comparison of paper counts across categories.")
+        st.markdown("### Publication Timeline")
+        fig = VisualizationModule.create_timeline_chart(classification)
+        if fig.data:
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Not enough timeline data")
     
     with tab4:
-        fig_pie = create_pie_chart(classification_results)
-        st.plotly_chart(fig_pie, use_container_width=True)
-        
-        st.info("🥧 **Pie Chart**: Percentage distribution of papers across categories.")
+        st.markdown("### Citation Distribution")
+        fig = VisualizationModule.create_citation_boxplot(classification)
+        if fig.data:
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Not enough citation data")
     
     with tab5:
-        fig_timeline = create_timeline_chart(classification_results)
-        st.plotly_chart(fig_timeline, use_container_width=True)
+        st.markdown("### Detailed Category View")
         
-        st.info("📈 **Timeline**: Publication trends over time for each category.")
-    
-    # Детальные результаты по категориям
-    st.markdown("### Detailed Results by Category")
-    
-    for category, cat_papers in classification_results.items():
-        if category != 'unclassified' and cat_papers:
-            with st.expander(f"📁 {category} ({len(cat_papers)} papers)", expanded=False):
-                # Показываем первые 10 статей
-                for i, paper in enumerate(cat_papers[:10], 1):
-                    st.markdown(f"""
-                    **{i}. {paper.get('title', 'No title')}**  
-                    📅 {paper.get('publication_year', 'N/A')} | 📊 {paper.get('cited_by_count', 0)} citations | 🔗 [DOI]({paper.get('doi_url', '#')})  
-                    🏷️ Matched: {', '.join(paper.get('matched_keywords', [])[:3])}
-                    """)
-                
-                if len(cat_papers) > 10:
-                    st.markdown(f"*... and {len(cat_papers) - 10} more papers*")
-    
-    # Неклассифицированные
-    if classification_results.get('unclassified'):
-        with st.expander(f"❓ Unclassified ({len(classification_results['unclassified'])} papers)", expanded=False):
-            st.markdown("These papers didn't match any of the defined categories.")
-            for i, paper in enumerate(classification_results['unclassified'][:10], 1):
-                st.markdown(f"{i}. {paper.get('title', 'No title')} - [{paper.get('doi', '')}]({paper.get('doi_url', '#')})")
+        # Выбор категории для детального просмотра
+        category_options = list(classification.keys())
+        selected_category = st.selectbox("Select category", category_options)
+        
+        if selected_category:
+            works = classification[selected_category]
             
-            if len(classification_results['unclassified']) > 10:
-                st.markdown(f"*... and {len(classification_results['unclassified']) - 10} more*")
+            if works:
+                st.markdown(f"""
+                <div class="category-card {' '.join(selected_category.lower().split()[:1])}">
+                    <h4>{selected_category}</h4>
+                    <p><strong>Papers:</strong> {len(works)}</p>
+                    <p><strong>Percentage:</strong> {(len(works) / total_papers * 100):.1f}%</p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Детальная информация
+                details = classifier.get_category_details(selected_category)
+                
+                if details:
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.markdown("**Top Journals:**")
+                        for journal, count in details.get('top_journals', [])[:5]:
+                            st.markdown(f"- {journal}: {count}")
+                    
+                    with col2:
+                        st.markdown("**Top Authors:**")
+                        for author, count in details.get('top_authors', [])[:5]:
+                            st.markdown(f"- {author}: {count}")
+                    
+                    st.markdown("**Sample Papers:**")
+                    for i, doi in enumerate(details.get('sample_dois', [])[:5]):
+                        if doi:
+                            st.markdown(f"{i+1}. [{doi}](https://doi.org/{doi})")
+                    
+                    # Word cloud (если есть matplotlib)
+                    try:
+                        fig = VisualizationModule.create_wordcloud(selected_category, works)
+                        st.pyplot(fig)
+                    except:
+                        pass
     
     # Экспорт результатов
-    st.markdown("### Export Results")
+    st.markdown("### 📥 Export Classification")
     
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        csv_data = export_classification_to_csv(classification_results)
+        json_data = classifier.export_classification("json")
         st.download_button(
-            label="📥 CSV (All Categories)",
-            data=csv_data,
-            file_name=f"classification_results.csv",
-            mime="text/csv",
+            label="📊 JSON",
+            data=json_data,
+            file_name=f"classification_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+            mime="application/json",
             use_container_width=True
         )
     
     with col2:
-        excel_data = export_classification_to_excel(classification_results)
+        csv_data = classifier.export_classification("csv")
         st.download_button(
-            label="📊 Excel (Multi-sheet)",
-            data=excel_data,
-            file_name=f"classification_results.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            label="📈 CSV",
+            data=csv_data,
+            file_name=f"classification_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+            mime="text/csv",
             use_container_width=True
         )
     
     with col3:
-        # Сохраняем дерево в JSON
-        tree_json = json.dumps(hierarchy_tree.to_dict(), indent=2)
+        # Подготовка данных для Excel
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            stats_df.to_excel(writer, sheet_name='Statistics', index=False)
+            
+            for cat_name, works in classification.items():
+                if works:
+                    cat_df = pd.DataFrame([{
+                        'DOI': w.get('doi'),
+                        'Title': w.get('title'),
+                        'Year': w.get('publication_year'),
+                        'Citations': w.get('cited_by_count'),
+                        'Authors': ', '.join(w.get('authors', [])[:3]),
+                        'Journal': w.get('journal_name')
+                    } for w in works[:100]])  # Ограничиваем для больших категорий
+                    
+                    cat_df.to_excel(writer, sheet_name=cat_name[:30], index=False)
+        
         st.download_button(
-            label="🌳 Hierarchy JSON",
-            data=tree_json,
-            file_name=f"hierarchy_tree.json",
-            mime="application/json",
+            label="📗 Excel",
+            data=output.getvalue(),
+            file_name=f"classification_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True
         )
     
@@ -1910,20 +2325,22 @@ def step_classification_results():
     st.markdown("---")
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        if st.button("🔄 Start New Hierarchical Analysis", use_container_width=True, type="primary"):
-            # Очищаем данные иерархической классификации
+        if st.button("🔄 Start New Analysis", use_container_width=True):
+            # Очищаем все данные сессии
             keys_to_clear = [
-                'hierarchical_levels', 'year_filter_obj', 'hier_search_results',
-                'classification_rules', 'classification_results', 'hierarchy_tree',
-                'papers_for_classification'
+                'clusterer', 'classifier', 'classification', 'query_builder',
+                'active_filters', 'cluster_filters', 'years_filter',
+                'categories_config', 'num_categories', 'cluster_levels',
+                'max_works_per_level', 'filtered_works', 'filtered_total_count'
             ]
             
             for key in keys_to_clear:
                 if key in st.session_state:
                     del st.session_state[key]
             
-            st.session_state.current_step = 5  # Новый шаг для иерархических фильтров
+            st.session_state.current_step = 1
             st.rerun()
+
 
 # ============================================================================
 # КЭШИРОВАНИЕ НА УРОВНЕ SQLite
@@ -1962,9 +2379,19 @@ def init_cache_db():
         )
     ''')
     
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS cluster_cache (
+            cache_key TEXT PRIMARY KEY,
+            data TEXT NOT NULL,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            expires_at DATETIME
+        )
+    ''')
+    
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_works_expires ON works_cache(expires_at)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_topic_works_expires ON topic_works_cache(expires_at)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_topics_expires ON topics_cache(expires_at)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_cluster_expires ON cluster_cache(expires_at)')
     
     conn.commit()
     conn.close()
@@ -2059,6 +2486,33 @@ def get_cached_topic_stats(topic_id: str) -> Optional[dict]:
         return json.loads(result[0])
     return None
 
+def cache_cluster_data(cache_key: str, data: dict):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    expires_at = datetime.now() + timedelta(days=7)
+    
+    cursor.execute('''
+        INSERT OR REPLACE INTO cluster_cache (cache_key, data, expires_at)
+        VALUES (?, ?, ?)
+    ''', (cache_key, json.dumps(data), expires_at))
+    
+    conn.commit()
+
+def get_cached_cluster_data(cache_key: str) -> Optional[dict]:
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT data FROM cluster_cache 
+        WHERE cache_key = ? AND (expires_at IS NULL OR expires_at > ?)
+    ''', (cache_key, datetime.now()))
+    
+    result = cursor.fetchone()
+    if result:
+        return json.loads(result[0])
+    return None
+
 def clear_old_cache():
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -2069,6 +2523,7 @@ def clear_old_cache():
     cursor.execute('DELETE FROM works_cache WHERE expires_at <= ?', (now_str,))
     cursor.execute('DELETE FROM topic_works_cache WHERE expires_at <= ?', (now_str,))
     cursor.execute('DELETE FROM topics_cache WHERE expires_at <= ?', (now_str,))
+    cursor.execute('DELETE FROM cluster_cache WHERE expires_at <= ?', (now_str,))
     
     conn.commit()
 
@@ -4679,8 +5134,8 @@ def create_progress_bar(current_step: int, total_steps: int):
         <span class="{'active' if current_step >= 3 else ''}">🎯 Topic Selection</span>
         <span class="{'active' if current_step >= 4 else ''}">⚙️ Filters</span>
         <span class="{'active' if current_step >= 5 else ''}">📊 Results</span>
-        <span class="{'active' if current_step >= 6 else ''}">🌲 Hierarchical Search</span>
-        <span class="{'active' if current_step >= 7 else ''}">📈 Classification</span>
+        <span class="{'active' if current_step >= 6 else ''}">🌳 Clustering</span>
+        <span class="{'active' if current_step >= 7 else ''}">📋 Classification</span>
     </div>
     """, unsafe_allow_html=True)
 
@@ -4698,15 +5153,6 @@ def create_back_button():
                     del st.session_state['filter_stats']
                 if 'top_keywords' in st.session_state:
                     del st.session_state['top_keywords']
-            
-            # Сбрасываем кэш иерархической классификации
-            if st.session_state.current_step in [6, 7]:
-                if 'hier_search_results' in st.session_state:
-                    del st.session_state['hier_search_results']
-                if 'classification_results' in st.session_state:
-                    del st.session_state['classification_results']
-                if 'hierarchy_tree' in st.session_state:
-                    del st.session_state['hierarchy_tree']
             
             st.session_state.current_step -= 1
             st.rerun()
@@ -5045,13 +5491,6 @@ def step_data_input():
     with col2:
         if st.button("🔄 Clear", use_container_width=True):
             st.rerun()
-    
-    # Кнопка перехода к иерархической классификации
-    st.markdown("---")
-    st.markdown("### 🌲 Or use Hierarchical Classification")
-    if st.button("🔍 Skip to Hierarchical Search", use_container_width=True, type="secondary"):
-        st.session_state.current_step = 5  # Переходим к шагу иерархических фильтров
-        st.rerun()
 
 def step_analysis():
     """Шаг 2: Анализ (компактный)"""
@@ -5367,38 +5806,12 @@ def step_results():
                 use_container_width=True
             )
         
-        # Кнопка нового анализа
+        # Кнопка перехода к кластеризации
         st.markdown("---")
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            if st.button("🔄 Start New Analysis", use_container_width=True):
-                # Очищаем все данные сессии
-                keys_to_clear = [
-                    'filtered_works', 'filtered_total_count', 'filter_stats',
-                    'selected_topic', 'selected_topic_id', 'selected_years', 
-                    'selected_citations', 'top_keywords', 'works_data', 
-                    'topic_counter', 'keyword_counter', 'successful', 
-                    'failed', 'dois'
-                ]
-                
-                for key in keys_to_clear:
-                    if key in st.session_state:
-                        del st.session_state[key]
-                
-                # Сбрасываем все чекбоксы
-                current_year = datetime.now().year
-                for year in range(current_year - 2, current_year + 1):
-                    if f"year_{year}" in st.session_state:
-                        del st.session_state[f"year_{year}"]
-                
-                for i in range(11):
-                    if f"citation_{i}" in st.session_state:
-                        del st.session_state[f"citation_{i}"]
-                
-                if "citation_all" in st.session_state:
-                    del st.session_state["citation_all"]
-                
-                st.session_state.current_step = 1
+            if st.button("🌳 Proceed to Hierarchical Clustering", type="primary", use_container_width=True):
+                st.session_state.current_step = 6
                 st.rerun()
 
 # ============================================================================
@@ -5416,7 +5829,7 @@ def main():
     st.markdown("""
     <h1 class="main-header">🔬 CTA Article Recommender Pro</h1>
     <p style="font-size: 1rem; color: #666; margin-bottom: 1.5rem;">
-    Discover fresh papers using AI-powered analysis with server-side filtering and hierarchical classification
+    Discover fresh papers using AI-powered analysis with server-side filtering
     </p>
     """, unsafe_allow_html=True)
     
@@ -5438,7 +5851,7 @@ def main():
     elif st.session_state.current_step == 5:
         step_results()
     elif st.session_state.current_step == 6:
-        step_hierarchical_results()
+        hierarchical_clustering_interface()
     elif st.session_state.current_step == 7:
         step_classification_results()
     
@@ -5447,7 +5860,7 @@ def main():
     st.markdown("""
     <div style="text-align: center; color: #888; font-size: 0.8rem; margin-top: 1rem;">
         <p>© CTA, https://chimicatechnoacta.ru / developed by daM©</p>
-        <p style="font-size: 0.7rem; color: #aaa;">v3.0 with hierarchical classification and dendrograms</p>
+        <p style="font-size: 0.7rem; color: #aaa;">v3.0 with hierarchical clustering and classification</p>
     </div>
     """, unsafe_allow_html=True)
 
