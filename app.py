@@ -8,11 +8,13 @@ matplotlib.use('Agg')
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import networkx as nx
 import re
 import time
 import json
+import random
 from datetime import datetime, timedelta
-from collections import Counter
+from collections import Counter, defaultdict
 from typing import List, Dict, Tuple, Optional, Set, Any
 import hashlib
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
@@ -28,11 +30,89 @@ warnings.filterwarnings('ignore')
 # ============================================================================
 
 st.set_page_config(
-    page_title="OpenAlex Multi-level Search",
-    page_icon="🔬",
+    page_title="Publication Clustering",
+    page_icon="📊",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
+
+# ============================================================================
+# ПАЛИТРЫ ТЕМ
+# ============================================================================
+
+COLOR_PALETTES = [
+    {
+        'name': 'Ocean Blues',
+        'primary': '#0066cc',
+        'secondary': '#00a8cc',
+        'gradient_start': '#0066cc',
+        'gradient_end': '#00a8cc',
+        'accent1': '#004d66',
+        'accent2': '#66c2ff',
+        'background': '#f0f8ff',
+        'card_bg': '#ffffff',
+        'text': '#003333',
+        'border': '#b3e0ff'
+    },
+    {
+        'name': 'Forest Green',
+        'primary': '#2e7d32',
+        'secondary': '#81c784',
+        'gradient_start': '#1b5e20',
+        'gradient_end': '#4caf50',
+        'accent1': '#0d3d0d',
+        'accent2': '#a5d6a7',
+        'background': '#f1f8e9',
+        'card_bg': '#ffffff',
+        'text': '#1b3b1b',
+        'border': '#c8e6c9'
+    },
+    {
+        'name': 'Sunset Orange',
+        'primary': '#e65100',
+        'secondary': '#ffb74d',
+        'gradient_start': '#bf360c',
+        'gradient_end': '#ff9800',
+        'accent1': '#8d2f00',
+        'accent2': '#ffe082',
+        'background': '#fff3e0',
+        'card_bg': '#ffffff',
+        'text': '#4a2c00',
+        'border': '#ffe0b2'
+    },
+    {
+        'name': 'Royal Purple',
+        'primary': '#6a1b9a',
+        'secondary': '#ba68c8',
+        'gradient_start': '#4a148c',
+        'gradient_end': '#9c27b0',
+        'accent1': '#311b92',
+        'accent2': '#ce93d8',
+        'background': '#f3e5f5',
+        'card_bg': '#ffffff',
+        'text': '#2a0f3a',
+        'border': '#e1bee7'
+    },
+    {
+        'name': 'Ruby Red',
+        'primary': '#b71c1c',
+        'secondary': '#ef5350',
+        'gradient_start': '#8b0000',
+        'gradient_end': '#d32f2f',
+        'accent1': '#5a0000',
+        'accent2': '#ffcdd2',
+        'background': '#ffebee',
+        'card_bg': '#ffffff',
+        'text': '#3b0000',
+        'border': '#ffcdd2'
+    }
+]
+
+# Выбираем случайную палитру при запуске
+if 'color_palette' not in st.session_state:
+    st.session_state['color_palette'] = random.choice(COLOR_PALETTES)
+
+colors = st.session_state['color_palette']
 
 # Научный стиль для matplotlib
 plt.style.use('default')
@@ -47,13 +127,13 @@ plt.rcParams.update({
     
     # Axes appearance
     'axes.facecolor': 'white',
-    'axes.edgecolor': 'black',
+    'axes.edgecolor': colors['accent1'],
     'axes.linewidth': 1.0,
     'axes.grid': False,
     
     # Tick parameters
-    'xtick.color': 'black',
-    'ytick.color': 'black',
+    'xtick.color': colors['text'],
+    'ytick.color': colors['text'],
     'xtick.labelsize': 10,
     'ytick.labelsize': 10,
     'xtick.direction': 'out',
@@ -69,7 +149,7 @@ plt.rcParams.update({
     'legend.fontsize': 10,
     'legend.frameon': True,
     'legend.framealpha': 0.9,
-    'legend.edgecolor': 'black',
+    'legend.edgecolor': colors['accent1'],
     'legend.fancybox': False,
     
     # Figure
@@ -86,113 +166,113 @@ plt.rcParams.update({
 })
 
 # ============================================================================
-# КАСТОМНЫЕ СТИЛИ (как в CTA Recommender)
+# КАСТОМНЫЕ СТИЛИ
 # ============================================================================
 
-st.markdown("""
+st.markdown(f"""
 <style>
-    .main-header {
+    .main-header {{
         font-size: 2.2rem;
         font-weight: 700;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: linear-gradient(135deg, {colors['gradient_start']} 0%, {colors['gradient_end']} 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         margin-bottom: 0.8rem;
-    }
+    }}
     
-    .step-card {
-        background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
+    .step-card {{
+        background: linear-gradient(135deg, {colors['gradient_start']}15 0%, {colors['gradient_end']}15 100%);
         border-radius: 12px;
         padding: 18px;
-        border-left: 4px solid #667eea;
+        border-left: 4px solid {colors['primary']};
         margin-bottom: 15px;
         box-shadow: 0 3px 5px rgba(0, 0, 0, 0.04);
-    }
+    }}
     
-    .metric-card {
-        background: white;
+    .metric-card {{
+        background: {colors['card_bg']};
         border-radius: 10px;
         padding: 15px;
         box-shadow: 0 3px 10px rgba(0, 0, 0, 0.06);
-        border: 1px solid #e0e0e0;
+        border: 1px solid {colors['border']};
         height: 100%;
         min-height: 90px;
-    }
+    }}
     
-    .metric-card h4 {
+    .metric-card h4 {{
         font-size: 0.85rem;
         margin: 0 0 8px 0;
-        color: #666;
-    }
+        color: {colors['accent1']};
+    }}
     
-    .metric-card .value {
+    .metric-card .value {{
         font-size: 1.6rem;
         font-weight: 700;
-        color: #333;
+        color: {colors['text']};
         line-height: 1.2;
-    }
+    }}
     
-    .result-card {
-        background: white;
+    .result-card {{
+        background: {colors['card_bg']};
         border-radius: 10px;
         padding: 15px;
         margin-bottom: 12px;
-        border-left: 3px solid #4CAF50;
+        border-left: 3px solid {colors['primary']};
         box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
-    }
+    }}
     
-    .info-message {
-        background: linear-gradient(135deg, #2196F315 0%, #0D47A115 100%);
+    .info-message {{
+        background: linear-gradient(135deg, {colors['primary']}15 0%, {colors['secondary']}15 100%);
         border-radius: 8px;
         padding: 12px;
-        border-left: 3px solid #2196F3;
+        border-left: 3px solid {colors['primary']};
         font-size: 0.9rem;
         margin: 10px 0;
-    }
+    }}
     
-    .warning-message {
+    .warning-message {{
         background: linear-gradient(135deg, #FF980015 0%, #EF6C0015 100%);
         border-radius: 8px;
         padding: 12px;
         border-left: 3px solid #FF9800;
         font-size: 0.9rem;
         margin: 10px 0;
-    }
+    }}
     
-    .filter-section {
+    .filter-section {{
         background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
         border-radius: 12px;
         padding: 15px;
         margin-bottom: 15px;
         border: 1px solid #dee2e6;
-    }
+    }}
     
-    .filter-header {
+    .filter-header {{
         font-size: 1.1rem;
         font-weight: 600;
-        color: #495057;
+        color: {colors['accent1']};
         margin-bottom: 12px;
         padding-bottom: 8px;
-        border-bottom: 2px solid #667eea;
-    }
+        border-bottom: 2px solid {colors['primary']};
+    }}
     
-    .filter-stats {
-        background: white;
+    .filter-stats {{
+        background: {colors['card_bg']};
         border-radius: 8px;
         padding: 12px;
-        border: 1px solid #ced4da;
+        border: 1px solid {colors['border']};
         margin-bottom: 15px;
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-    }
+    }}
     
-    .year-checkbox-container {
+    .year-checkbox-container {{
         display: grid;
         grid-template-columns: repeat(3, 1fr);
         gap: 10px;
         margin-bottom: 15px;
-    }
+    }}
     
-    .year-checkbox-item {
+    .year-checkbox-item {{
         background: white;
         border-radius: 6px;
         padding: 10px;
@@ -200,36 +280,52 @@ st.markdown("""
         text-align: center;
         cursor: pointer;
         transition: all 0.2s ease;
-    }
+    }}
     
-    .year-checkbox-item:hover {
-        border-color: #667eea;
-        background-color: #f8f9ff;
-    }
+    .year-checkbox-item:hover {{
+        border-color: {colors['primary']};
+        background-color: {colors['background']};
+    }}
     
-    .year-checkbox-item.selected {
-        background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
-        border-color: #667eea;
-        color: #667eea;
+    .year-checkbox-item.selected {{
+        background: linear-gradient(135deg, {colors['primary']}15 0%, {colors['secondary']}15 100%);
+        border-color: {colors['primary']};
+        color: {colors['primary']};
         font-weight: 600;
-    }
+    }}
     
-    .scientific-plot {
+    .scientific-plot {{
         background: white;
         border-radius: 8px;
         padding: 15px;
-        border: 1px solid #dee2e6;
+        border: 1px solid {colors['border']};
         margin: 20px 0;
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-    }
+    }}
     
-    .scientific-plot h4 {
-        color: #2C3E50;
+    .scientific-plot h4 {{
+        color: {colors['accent1']};
         font-weight: 600;
         margin-bottom: 15px;
         padding-bottom: 8px;
-        border-bottom: 2px solid #667eea;
-    }
+        border-bottom: 2px solid {colors['primary']};
+    }}
+    
+    .back-button {{
+        background-color: {colors['background']};
+        color: {colors['primary']};
+        border: 2px solid {colors['primary']};
+        border-radius: 8px;
+        padding: 0.5rem 1rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }}
+    
+    .back-button:hover {{
+        background-color: {colors['primary']};
+        color: white;
+    }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -246,7 +342,7 @@ logger = logging.getLogger(__name__)
 
 OPENALEX_BASE_URL = "https://api.openalex.org"
 MAILTO = "your-email@example.com"  # Замените на ваш email
-POLITE_POOL_HEADER = {'User-Agent': f'MultiLevel-Search (mailto:{MAILTO})'}
+POLITE_POOL_HEADER = {'User-Agent': f'Publication-Clustering (mailto:{MAILTO})'}
 
 # Настройки rate limit
 RATE_LIMIT_PER_SECOND = 8
@@ -270,8 +366,8 @@ def parse_query_terms(term: str) -> str:
     """
     Парсит поисковый термин для OpenAlex API.
     Поддерживает:
-    - Простые слова: MOF
-    - Фразы в кавычках: "metal-organic frameworks"
+    - Простые слова
+    - Фразы в кавычках
     - Логические операторы: AND, OR, NOT
     """
     term = term.strip()
@@ -339,7 +435,7 @@ def create_result_card(work: dict, index: int, topic: str):
     <div class="result-card">
         <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
             <div>
-                <span style="font-weight: 600; color: #667eea; margin-right: 8px;">{topic} #{index}</span>
+                <span style="font-weight: 600; color: {colors['primary']}; margin-right: 8px;">{topic} #{index}</span>
                 <span style="background: {badge_color}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem;">
                     {badge_text}
                 </span>
@@ -353,12 +449,33 @@ def create_result_card(work: dict, index: int, topic: str):
         <div style="color: #555; font-size: 0.85rem; margin-bottom: 5px;">👤 {authors}</div>
         <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
             <span>{oa_badge} {work.get('journal', '')[:30]}</span>
-            <a href="{doi_url}" target="_blank" style="color: #2196F3; text-decoration: none; font-size: 0.85rem;">
+            <a href="{doi_url}" target="_blank" style="color: {colors['primary']}; text-decoration: none; font-size: 0.85rem;">
                 🔗 View Article
             </a>
         </div>
     </div>
     """, unsafe_allow_html=True)
+
+def navigation_buttons(show_back: bool = True, show_new: bool = True):
+    """Отображает кнопки навигации"""
+    col1, col2, col3 = st.columns([1, 1, 2])
+    
+    with col1:
+        if show_back and st.session_state.step > 1:
+            if st.button("← Back", key="back_btn", use_container_width=True):
+                st.session_state.step -= 1
+                st.rerun()
+    
+    with col2:
+        if show_new:
+            if st.button("🔄 New Search", key="new_btn", use_container_width=True):
+                # Очищаем сессию
+                for key in ['step', 'results', 'topic_counts', 'level1_count', 'level2_count',
+                           'level1_input', 'level2_input', 'level3_input', 'years_input']:
+                    if key in st.session_state:
+                        del st.session_state[key]
+                st.session_state.step = 1
+                st.rerun()
 
 # ============================================================================
 # ФУНКЦИИ ДЛЯ ПОСТРОЕНИЯ ЗАПРОСОВ
@@ -682,7 +799,7 @@ def create_yearly_distribution_chart(works: List[Dict], title: str):
     
     fig, ax = plt.subplots(figsize=(10, 5))
     
-    bars = ax.bar(years_sorted, counts, color='#667eea', edgecolor='black', linewidth=0.5)
+    bars = ax.bar(years_sorted, counts, color=colors['primary'], edgecolor='black', linewidth=0.5)
     ax.set_xlabel('Publication Year', fontsize=10, fontweight='bold')
     ax.set_ylabel('Number of Publications', fontsize=10, fontweight='bold')
     ax.set_title(title, fontsize=11, fontweight='bold', pad=10)
@@ -708,7 +825,7 @@ def create_citation_distribution_chart(works: List[Dict], title: str):
     fig, ax = plt.subplots(figsize=(10, 5))
     
     # Создаем гистограмму
-    n, bins, patches = ax.hist(citations, bins=20, color='#764ba2', 
+    n, bins, patches = ax.hist(citations, bins=20, color=colors['secondary'], 
                                edgecolor='black', linewidth=0.5, alpha=0.7)
     
     ax.set_xlabel('Number of Citations', fontsize=10, fontweight='bold')
@@ -726,6 +843,144 @@ def create_citation_distribution_chart(works: List[Dict], title: str):
     ax.legend(fontsize=8, frameon=True, edgecolor='black')
     
     plt.tight_layout()
+    return fig
+
+def create_cluster_graph(works_by_topic: Dict[str, List[Dict]], level1_term: str, level2_term: Optional[str] = None):
+    """Создает граф-кластер связей между подтемами на основе общих концепций"""
+    
+    # Создаем граф
+    G = nx.Graph()
+    
+    # Добавляем узлы (подтемы)
+    topics = list(works_by_topic.keys())
+    topic_sizes = {topic: len(works) for topic, works in works_by_topic.items()}
+    
+    for topic in topics:
+        if topic_sizes[topic] > 0:
+            G.add_node(topic, size=topic_sizes[topic])
+    
+    # Анализируем связи между подтемами на основе общих ключевых слов и авторов
+    topic_keywords = {}
+    topic_authors = {}
+    
+    for topic, works in works_by_topic.items():
+        keywords = []
+        authors = []
+        for work in works:
+            # Извлекаем ключевые слова из названия
+            if work.get('title'):
+                words = re.findall(r'\b[a-zA-Z]{3,}\b', work['title'].lower())
+                keywords.extend(words)
+            # Добавляем авторов
+            if work.get('authors'):
+                authors.extend(work['authors'])
+        
+        # Берем топ ключевых слов
+        if keywords:
+            keyword_counter = Counter(keywords)
+            topic_keywords[topic] = set([k for k, _ in keyword_counter.most_common(10)])
+        else:
+            topic_keywords[topic] = set()
+        
+        if authors:
+            author_counter = Counter(authors)
+            topic_authors[topic] = set([a for a, _ in author_counter.most_common(5)])
+        else:
+            topic_authors[topic] = set()
+    
+    # Добавляем ребра на основе сходства
+    for i, topic1 in enumerate(topics):
+        for j, topic2 in enumerate(topics[i+1:], i+1):
+            if topic_sizes[topic1] == 0 or topic_sizes[topic2] == 0:
+                continue
+            
+            # Вычисляем сходство по ключевым словам
+            keywords1 = topic_keywords.get(topic1, set())
+            keywords2 = topic_keywords.get(topic2, set())
+            
+            if keywords1 and keywords2:
+                keyword_overlap = len(keywords1 & keywords2) / len(keywords1 | keywords2)
+            else:
+                keyword_overlap = 0
+            
+            # Вычисляем сходство по авторам
+            authors1 = topic_authors.get(topic1, set())
+            authors2 = topic_authors.get(topic2, set())
+            
+            if authors1 and authors2:
+                author_overlap = len(authors1 & authors2) / len(authors1 | authors2)
+            else:
+                author_overlap = 0
+            
+            # Общее сходство
+            similarity = (keyword_overlap * 0.7 + author_overlap * 0.3)
+            
+            # Добавляем ребро если есть значимое сходство
+            if similarity > 0.1:
+                G.add_edge(topic1, topic2, weight=similarity)
+    
+    # Создаем визуализацию с plotly
+    pos = nx.spring_layout(G, k=2, iterations=50)
+    
+    # Подготовка данных для ребер
+    edge_traces = []
+    for edge in G.edges():
+        x0, y0 = pos[edge[0]]
+        x1, y1 = pos[edge[1]]
+        weight = G[edge[0]][edge[1]]['weight']
+        
+        edge_trace = go.Scatter(
+            x=[x0, x1, None],
+            y=[y0, y1, None],
+            line=dict(width=weight*5, color='rgba(100,100,100,0.3)'),
+            hoverinfo='none',
+            mode='lines'
+        )
+        edge_traces.append(edge_trace)
+    
+    # Подготовка данных для узлов
+    node_x = []
+    node_y = []
+    node_text = []
+    node_size = []
+    
+    for node in G.nodes():
+        x, y = pos[node]
+        node_x.append(x)
+        node_y.append(y)
+        node_text.append(f"{node}<br>Papers: {topic_sizes[node]}")
+        node_size.append(topic_sizes[node] * 2)  # Масштабируем размер
+    
+    node_trace = go.Scatter(
+        x=node_x,
+        y=node_y,
+        mode='markers+text',
+        text=list(G.nodes()),
+        textposition="middle center",
+        hovertext=node_text,
+        hoverinfo='text',
+        marker=dict(
+            showscale=True,
+            colorscale='Viridis',
+            size=node_size,
+            color=list(range(len(G.nodes()))),
+            line=dict(color='black', width=1)
+        )
+    )
+    
+    # Создаем фигуру
+    fig = go.Figure(data=edge_traces + [node_trace],
+                    layout=go.Layout(
+                        title=f'Topic Clusters: {level1_term}' + (f' + {level2_term}' if level2_term else ''),
+                        titlefont=dict(size=16, color=colors['primary']),
+                        showlegend=False,
+                        hovermode='closest',
+                        margin=dict(b=20, l=5, r=5, t=40),
+                        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                        plot_bgcolor='white'
+                    ))
+    
     return fig
 
 # ============================================================================
@@ -772,7 +1027,7 @@ def export_to_excel(works_by_topic: Dict[str, List[Dict]]) -> bytes:
         workbook = writer.book
         header_format = workbook.add_format({
             'bold': True,
-            'bg_color': '#667eea',
+            'bg_color': colors['primary'],
             'font_color': 'white',
             'border': 1
         })
@@ -805,11 +1060,18 @@ def main():
     """Главная функция приложения"""
     
     # Заголовок
-    st.markdown('<h1 class="main-header">🔬 OpenAlex Multi-level Search</h1>', unsafe_allow_html=True)
-    st.markdown("""
-    <p style="font-size: 1rem; color: #666; margin-bottom: 1.5rem;">
-    Search scientific literature with multi-level filtering and OR support
+    st.markdown(f'<h1 class="main-header">📊 Publication Clustering</h1>', unsafe_allow_html=True)
+    st.markdown(f"""
+    <p style="font-size: 1rem; color: {colors['text']}; margin-bottom: 1.5rem;">
+    Multi-level literature search with topic clustering and network visualization
     </p>
+    """, unsafe_allow_html=True)
+    
+    # Отображаем информацию о текущей теме
+    st.markdown(f"""
+    <div style="text-align: right; font-size: 0.8rem; color: {colors['primary']}; margin-bottom: 0.5rem;">
+        Theme: {colors['name']}
+    </div>
     """, unsafe_allow_html=True)
     
     # Инициализация состояния сессии
@@ -837,7 +1099,7 @@ def main():
     # ========================================================================
     
     if st.session_state.step == 1:
-        st.markdown("""
+        st.markdown(f"""
         <div class="step-card">
             <h3 style="margin: 0; font-size: 1.3rem;">📥 Step 1: Enter Search Terms</h3>
             <p style="margin: 5px 0; font-size: 0.9rem;">Define your multi-level search query</p>
@@ -845,7 +1107,7 @@ def main():
         """, unsafe_allow_html=True)
         
         # Информация о синтаксисе
-        st.markdown("""
+        st.markdown(f"""
         <div class="info-message">
             <strong>💡 Search Syntax:</strong><br>
             • Use <b>OR</b> for logical OR (e.g., "MOF OR COF")<br>
@@ -930,7 +1192,7 @@ def main():
     # ========================================================================
     
     elif st.session_state.step == 2:
-        st.markdown("""
+        st.markdown(f"""
         <div class="step-card">
             <h3 style="margin: 0; font-size: 1.3rem;">🔍 Step 2: Analysis in Progress</h3>
             <p style="margin: 5px 0; font-size: 0.9rem;">Fetching data from OpenAlex...</p>
@@ -947,6 +1209,13 @@ def main():
             Years: {', '.join(map(str, st.session_state.years_input))}
         </div>
         """, unsafe_allow_html=True)
+        
+        # Кнопка возврата
+        col1, col2 = st.columns([1, 3])
+        with col1:
+            if st.button("← Back to Step 1", key="back_from_step2"):
+                st.session_state.step = 1
+                st.rerun()
         
         # Прогресс
         progress_bar = st.progress(0)
@@ -1023,12 +1292,30 @@ def main():
     # ========================================================================
     
     elif st.session_state.step == 3:
-        st.markdown("""
+        st.markdown(f"""
         <div class="step-card">
             <h3 style="margin: 0; font-size: 1.3rem;">📊 Step 3: Results</h3>
             <p style="margin: 5px 0; font-size: 0.9rem;">Analysis complete - review the findings</p>
         </div>
         """, unsafe_allow_html=True)
+        
+        # Навигационные кнопки
+        nav_col1, nav_col2, nav_col3 = st.columns([1, 1, 2])
+        
+        with nav_col1:
+            if st.button("← Back to Step 2", key="back_from_step3"):
+                st.session_state.step = 2
+                st.rerun()
+        
+        with nav_col2:
+            if st.button("🔄 New Search", key="new_from_step3"):
+                # Очищаем сессию
+                for key in ['step', 'results', 'topic_counts', 'level1_count', 'level2_count',
+                           'level1_input', 'level2_input', 'level3_input', 'years_input']:
+                    if key in st.session_state:
+                        del st.session_state[key]
+                st.session_state.step = 1
+                st.rerun()
         
         # Статистика
         col1, col2, col3, col4 = st.columns(4)
@@ -1049,18 +1336,19 @@ def main():
         
         st.markdown("---")
         
-        # Проверка на пересечение тем
-        total_percentage = sum(st.session_state.topic_counts.values()) / st.session_state.level2_count * 100
-        if total_percentage > 105:  # Допускаем небольшую погрешность
-            st.markdown("""
-            <div class="warning-message">
-                <strong>⚠️ Note:</strong> Some papers may be counted in multiple sub-topics
-                (e.g., a paper containing multiple keywords in title/abstract)
-            </div>
-            """, unsafe_allow_html=True)
+        # Показываем соотношение найденных статей
+        st.markdown(f"""
+        <div class="info-message">
+            <strong>📊 Topic Distribution Analysis:</strong><br>
+            Total papers matching Level 1+2 filters: {st.session_state.level2_count}<br>
+            Sum of papers in all sub-topics: {sum(st.session_state.topic_counts.values())}<br>
+            <i>Note: Papers containing multiple sub-topic keywords are counted in each category, 
+            so the sum may exceed the total.</i>
+        </div>
+        """, unsafe_allow_html=True)
         
         # Вкладки для разных представлений
-        tab1, tab2, tab3 = st.tabs(["📈 Visualizations", "📋 Papers by Topic", "📥 Export"])
+        tab1, tab2, tab3, tab4 = st.tabs(["📈 Topic Distribution", "🕸️ Cluster Graph", "📋 Papers by Topic", "📥 Export"])
         
         with tab1:
             # График сравнения подтем
@@ -1082,7 +1370,7 @@ def main():
             for term, works in st.session_state.results.items():
                 if works:
                     st.markdown(f'<div class="scientific-plot">', unsafe_allow_html=True)
-                    st.markdown(f"<h4>Analysis for: {term}</h4>", unsafe_allow_html=True)
+                    st.markdown(f"<h4>Analysis for: {term} ({len(works)} papers)</h4>", unsafe_allow_html=True)
                     
                     col1, col2 = st.columns(2)
                     
@@ -1101,6 +1389,32 @@ def main():
                     st.markdown('</div>', unsafe_allow_html=True)
         
         with tab2:
+            # Кластер-граф
+            st.markdown('<div class="scientific-plot">', unsafe_allow_html=True)
+            st.markdown("<h4>Topic Relationship Network</h4>", unsafe_allow_html=True)
+            
+            if any(len(works) > 0 for works in st.session_state.results.values()):
+                fig = create_cluster_graph(
+                    st.session_state.results,
+                    st.session_state.level1_input,
+                    st.session_state.level2_input
+                )
+                st.plotly_chart(fig, use_container_width=True)
+                
+                st.markdown("""
+                <div class="info-message">
+                    <strong>📌 Graph Interpretation:</strong><br>
+                    • Node size = number of papers in topic<br>
+                    • Edge thickness = similarity between topics (based on keywords and authors)<br>
+                    • Connected topics share common concepts or researchers
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.info("No data available for cluster visualization")
+            
+            st.markdown('</div>', unsafe_allow_html=True)
+        
+        with tab3:
             # Показываем статьи по каждой подтеме
             for term, works in st.session_state.results.items():
                 if works:
@@ -1112,7 +1426,7 @@ def main():
                             if i < len(works[:10]):
                                 st.markdown("---")
         
-        with tab3:
+        with tab4:
             st.markdown("### 📥 Export Results")
             
             col1, col2 = st.columns(2)
@@ -1123,7 +1437,7 @@ def main():
                 st.download_button(
                     label="📊 Download CSV",
                     data=csv_data,
-                    file_name=f"openalex_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    file_name=f"publication_clusters_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                     mime="text/csv",
                     use_container_width=True
                 )
@@ -1134,39 +1448,19 @@ def main():
                 st.download_button(
                     label="📈 Download Excel",
                     data=excel_data,
-                    file_name=f"openalex_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                    file_name=f"publication_clusters_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True
                 )
-        
-        # Кнопка нового поиска
-        st.markdown("---")
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            if st.button("🔄 New Search", use_container_width=True):
-                # Очищаем сессию
-                for key in ['step', 'results', 'topic_counts', 'level1_count', 'level2_count',
-                           'level1_input', 'level2_input', 'level3_input', 'years_input']:
-                    if key in st.session_state:
-                        del st.session_state[key]
-                st.session_state.step = 1
-                st.rerun()
     
     # Футер
     st.markdown("---")
-    st.markdown("""
+    st.markdown(f"""
     <div style="text-align: center; color: #888; font-size: 0.8rem; margin-top: 1rem;">
-        <p>© OpenAlex Multi-level Search | Data from OpenAlex API</p>
+        <p>© Publication Clustering | Data from OpenAlex API | Theme: {colors['name']}</p>
     </div>
     """, unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
 
