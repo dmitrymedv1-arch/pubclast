@@ -910,10 +910,10 @@ def main():
                     st.error("❌ Please enter at least one Level 3 term")
                 else:
                     # Сохраняем в сессию через словарь
-                    st.session_state['level1'] = level1.strip()
-                    st.session_state['level2'] = level2.strip() or None
-                    st.session_state['level3'] = [t.strip() for t in level3_text.split('\n') if t.strip()]
-                    st.session_state['years'] = years
+                    st.session_state['level1_input'] = level1.strip()
+                    st.session_state['level2_input'] = level2.strip() or None
+                    st.session_state['level3_input'] = [t.strip() for t in level3_text.split('\n') if t.strip()]
+                    st.session_state['years_input'] = years
                     st.session_state['step'] = 2
                     st.rerun()
     
@@ -1154,6 +1154,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
