@@ -5,7 +5,6 @@ numpy
 plotly
 nltk
 aiohttp
-asyncio
 tenacity
 ratelimit
 joblib
@@ -17,16 +16,14 @@ openpyxl
 pytz
 python-dateutil
 typing-extensions
-dataclasses
 SQLAlchemy
-sqlite3-utils
-tqdm
+tqdm=
 colorama
 urllib3
 certifi
 idna
 charset-normalizer
-multidict
+multidict4
 yarl
 frozenlist
 aiosignal
