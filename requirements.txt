@@ -23,10 +23,11 @@ urllib3
 certifi
 idna
 charset-normalizer
-multidict4
+multidict
 yarl
 frozenlist
 aiosignal
 async-timeout
 attrs
+
 
