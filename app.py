@@ -787,9 +787,19 @@ def create_scientific_bar_chart(data: Dict[str, int], level2_count: int, title: 
     
     return fig
 
-def create_yearly_distribution_chart(works: List[Dict], title: str):
+def create_yearly_distribution_chart(works_or_counts, title: str, is_counts_data: bool = False):
     """Создает график распределения по годам"""
-    years = [w.get('publication_year') for w in works if w.get('publication_year')]
+    if is_counts_data:
+        # Если переданы данные из topic_counts (словарь с годами)
+        year_counts = works_or_counts
+        years_sorted = sorted(year_counts.keys())
+        counts = [year_counts[y] for y in years_sorted]
+    else:
+        # Если переданы работы
+        years = [w.get('publication_year') for w in works_or_counts if w.get('publication_year')]
+        year_counts = Counter(years)
+        years_sorted = sorted(year_counts.keys())
+        counts = [year_counts[y] for y in years_sorted]
     if not years:
         return None
     
@@ -816,9 +826,14 @@ def create_yearly_distribution_chart(works: List[Dict], title: str):
     plt.tight_layout()
     return fig
 
-def create_citation_distribution_chart(works: List[Dict], title: str):
+def create_citation_distribution_chart(works_or_counts, title: str, is_counts_data: bool = False):
     """Создает график распределения цитирований"""
-    citations = [w.get('cited_by_count', 0) for w in works]
+    if is_counts_data:
+        # Для данных topic_counts создаем заглушку или информационное сообщение
+        st.info("Citation distribution not available for aggregated data")
+        return None
+    else:
+        citations = [w.get('cited_by_count', 0) for w in works_or_counts]
     if not citations:
         return None
     
@@ -845,21 +860,21 @@ def create_citation_distribution_chart(works: List[Dict], title: str):
     plt.tight_layout()
     return fig
 
-def create_cluster_graph(works_by_topic: Dict[str, List[Dict]], level1_term: str, level2_term: Optional[str] = None):
+def create_cluster_graph(topic_counts: Dict[str, int], works_by_topic: Dict[str, List[Dict]], 
+                        level1_term: str, level2_term: Optional[str] = None):
     """Создает граф-кластер связей между подтемами на основе общих концепций"""
     
     # Создаем граф
     G = nx.Graph()
     
-    # Добавляем узлы (подтемы)
-    topics = list(works_by_topic.keys())
-    topic_sizes = {topic: len(works) for topic, works in works_by_topic.items()}
+    # Добавляем узлы (подтемы) с размерами из topic_counts
+    topics = list(topic_counts.keys())
     
     for topic in topics:
-        if topic_sizes[topic] > 0:
-            G.add_node(topic, size=topic_sizes[topic])
+        if topic_counts[topic] > 0:
+            G.add_node(topic, size=topic_counts[topic])
     
-    # Анализируем связи между подтемами на основе общих ключевых слов и авторов
+    # Для анализа связей используем топ-работы
     topic_keywords = {}
     topic_authors = {}
     
@@ -891,7 +906,7 @@ def create_cluster_graph(works_by_topic: Dict[str, List[Dict]], level1_term: str
     # Добавляем ребра на основе сходства
     for i, topic1 in enumerate(topics):
         for j, topic2 in enumerate(topics[i+1:], i+1):
-            if topic_sizes[topic1] == 0 or topic_sizes[topic2] == 0:
+            if topic_counts[topic1] == 0 or topic_counts[topic2] == 0:
                 continue
             
             # Вычисляем сходство по ключевым словам
@@ -899,7 +914,7 @@ def create_cluster_graph(works_by_topic: Dict[str, List[Dict]], level1_term: str
             keywords2 = topic_keywords.get(topic2, set())
             
             if keywords1 and keywords2:
-                keyword_overlap = len(keywords1 & keywords2) / len(keywords1 | keywords2)
+                keyword_overlap = len(keywords1 & keywords2) / len(keywords1 | keywords2) if (keywords1 | keywords2) else 0
             else:
                 keyword_overlap = 0
             
@@ -908,7 +923,7 @@ def create_cluster_graph(works_by_topic: Dict[str, List[Dict]], level1_term: str
             authors2 = topic_authors.get(topic2, set())
             
             if authors1 and authors2:
-                author_overlap = len(authors1 & authors2) / len(authors1 | authors2)
+                author_overlap = len(authors1 & authors2) / len(authors1 | authors2) if (authors1 | authors2) else 0
             else:
                 author_overlap = 0
             
@@ -948,8 +963,8 @@ def create_cluster_graph(works_by_topic: Dict[str, List[Dict]], level1_term: str
         x, y = pos[node]
         node_x.append(x)
         node_y.append(y)
-        node_text.append(f"{node}<br>Papers: {topic_sizes[node]}")
-        node_size.append(topic_sizes[node] * 2)  # Масштабируем размер
+        node_text.append(f"{node}<br>Total papers: {topic_counts[node]}<br>Top papers analyzed: {len(works_by_topic.get(node, []))}")
+        node_size.append(topic_counts[node] * 2)  # Масштабируем размер
     
     node_trace = go.Scatter(
         x=node_x,
@@ -1369,24 +1384,38 @@ def main():
                 st.markdown('</div>', unsafe_allow_html=True)
             
             # Графики для каждой подтемы
-            for term, works in st.session_state.results.items():
-                if works:
+            for term in st.session_state.topic_counts.keys():
+                total_count = st.session_state.topic_counts.get(term, 0)
+                top_works = st.session_state.results.get(term, [])
+                
+                if total_count > 0:
                     st.markdown(f'<div class="scientific-plot">', unsafe_allow_html=True)
-                    st.markdown(f"<h4>Analysis for: {term} ({len(works)} papers)</h4>", unsafe_allow_html=True)
+                    st.markdown(f"<h4>Analysis for: {term} (Total: {total_count} papers, showing distribution of top {len(top_works)})</h4>", unsafe_allow_html=True)
                     
+                    # Создаем данные по годам из всех работ (для этого нужно получать распределение по годам из API)
+                    # Пока используем топ-работы как прокси
                     col1, col2 = st.columns(2)
                     
                     with col1:
-                        fig1 = create_yearly_distribution_chart(works, f"{term}: Publications by Year")
-                        if fig1:
-                            st.pyplot(fig1)
-                            plt.close(fig1)
+                        if top_works:
+                            fig1 = create_yearly_distribution_chart(top_works, f"{term}: Publications by Year (based on top papers)")
+                            if fig1:
+                                st.pyplot(fig1)
+                                plt.close(fig1)
+                        else:
+                            st.info(f"No detailed data available for {term}")
                     
                     with col2:
-                        fig2 = create_citation_distribution_chart(works, f"{term}: Citation Distribution")
-                        if fig2:
-                            st.pyplot(fig2)
-                            plt.close(fig2)
+                        if top_works:
+                            fig2 = create_citation_distribution_chart(top_works, f"{term}: Citation Distribution (based on top papers)")
+                            if fig2:
+                                st.pyplot(fig2)
+                                plt.close(fig2)
+                        else:
+                            st.info(f"No detailed data available for {term}")
+                    
+                    st.markdown(f'<p style="font-size:0.8rem; color:#666; text-align:right;">Based on top {len(top_works)} most relevant papers</p>', unsafe_allow_html=True)
+                    st.markdown('</div>', unsafe_allow_html=True)
                     
                     st.markdown('</div>', unsafe_allow_html=True)
         
@@ -1397,6 +1426,7 @@ def main():
             
             if any(len(works) > 0 for works in st.session_state.results.values()):
                 fig = create_cluster_graph(
+                    st.session_state.topic_counts,
                     st.session_state.results,
                     st.session_state.level1_input,
                     st.session_state.level2_input
@@ -1465,5 +1495,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
