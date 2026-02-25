@@ -823,6 +823,14 @@ def main():
         st.session_state['level1_count'] = 0
     if 'level2_count' not in st.session_state:
         st.session_state['level2_count'] = 0
+    if 'level1_input' not in st.session_state:
+        st.session_state['level1_input'] = ''
+    if 'level2_input' not in st.session_state:
+        st.session_state['level2_input'] = ''
+    if 'level3_input' not in st.session_state:
+        st.session_state['level3_input'] = []
+    if 'years_input' not in st.session_state:
+        st.session_state['years_input'] = []
     
     # ========================================================================
     # ШАГ 1: ВВОД ТЕРМИНОВ
@@ -933,10 +941,10 @@ def main():
         st.markdown(f"""
         <div class="filter-stats">
             <strong>Query Parameters:</strong><br>
-            Level 1: {st.session_state.level1}<br>
-            Level 2: {st.session_state.level2 or '(not specified)'}<br>
-            Level 3: {', '.join(st.session_state.level3)}<br>
-            Years: {', '.join(map(str, st.session_state.years))}
+            Level 1: {st.session_state.level1_input}<br>
+            Level 2: {st.session_state.level2_input or '(not specified)'}<br>
+            Level 3: {', '.join(st.session_state.level3_input)}<br>
+            Years: {', '.join(map(str, st.session_state.years_input))}
         </div>
         """, unsafe_allow_html=True)
         
@@ -952,14 +960,14 @@ def main():
             # Шаг 1: Level 1 count
             update_progress(0.1, "Getting Level 1 count...")
             st.session_state['level1_count'] = get_total_count(
-                st.session_state['level1'], None, st.session_state['years']
+                st.session_state['level1_input'], None, st.session_state['years_input']
             )
             
             # Шаг 2: Level 2 count (if applicable)
-            if st.session_state['level2']:
+            if st.session_state['level2_input']:
                 update_progress(0.2, "Getting Level 2 count...")
                 st.session_state['level2_count'] = get_total_count(
-                    st.session_state['level1'], st.session_state['level2'], st.session_state['years']
+                    st.session_state['level1_input'], st.session_state['level2_input'], st.session_state['years_input']
                 )
             else:
                 st.session_state['level2_count'] = st.session_state['level1_count']
@@ -967,10 +975,10 @@ def main():
             # Шаг 3: Level 3 counts
             update_progress(0.3, "Analyzing Level 3 terms...")
             st.session_state['topic_counts'] = get_topic_counts(
-                st.session_state['level1'],
-                st.session_state['level2'],
-                st.session_state['level3'],
-                st.session_state['years'],
+                st.session_state['level1_input'],
+                st.session_state['level2_input'],
+                st.session_state['level3_input'],
+                st.session_state['years_input'],
                 lambda p, m: update_progress(0.3 + p*0.2, m)
             )
             
@@ -978,21 +986,21 @@ def main():
             update_progress(0.5, "Fetching top papers...")
             st.session_state['results'] = {}
             
-            for i, term in enumerate(st.session_state['level3']):
+            for i, term in enumerate(st.session_state['level3_input']):
                 if st.session_state['topic_counts'][term] == 0:
                     st.session_state['results'][term] = []
                     continue
                 
                 update_progress(
-                    0.5 + (i / len(st.session_state['level3'])) * 0.4,
+                    0.5 + (i / len(st.session_state['level3_input'])) * 0.4,
                     f"Fetching papers for: {term}"
                 )
                 
                 works = fetch_top_works(
-                    st.session_state['level1'],
-                    st.session_state['level2'],
+                    st.session_state['level1_input'],
+                    st.session_state['level2_input'],
                     term,
-                    st.session_state['years'],
+                    st.session_state['years_input'],
                     100,
                     lambda p, m: None
                 )
@@ -1138,7 +1146,7 @@ def main():
             if st.button("🔄 New Search", use_container_width=True):
                 # Очищаем сессию
                 for key in ['step', 'results', 'topic_counts', 'level1_count', 'level2_count',
-                           'level1', 'level2', 'level3', 'years']:
+                           'level1_input', 'level2_input', 'level3_input', 'years_input']:
                     if key in st.session_state:
                         del st.session_state[key]
                 st.session_state.step = 1
@@ -1154,6 +1162,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
