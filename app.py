@@ -971,8 +971,10 @@ def create_cluster_graph(works_by_topic: Dict[str, List[Dict]], level1_term: str
     # Создаем фигуру
     fig = go.Figure(data=edge_traces + [node_trace],
                     layout=go.Layout(
-                        title=f'Topic Clusters: {level1_term}' + (f' + {level2_term}' if level2_term else ''),
-                        titlefont=dict(size=16, color=colors['primary']),
+                        title={
+                            'text': f'Topic Clusters: {level1_term}' + (f' + {level2_term}' if level2_term else ''),
+                            'font': {'size': 16, 'color': colors['primary']}
+                        },
                         showlegend=False,
                         hovermode='closest',
                         margin=dict(b=20, l=5, r=5, t=40),
@@ -1463,4 +1465,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
