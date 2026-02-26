@@ -23,6 +23,7 @@ import logging
 import io
 from pathlib import Path
 import warnings
+from reportlab.lib.colors import HexColor
 warnings.filterwarnings('ignore')
 
 # ============================================================================
@@ -2177,3 +2178,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
