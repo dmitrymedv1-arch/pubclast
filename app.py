@@ -2193,11 +2193,11 @@ def export_to_csv(works_by_topic: Dict[str, List[Dict]]) -> bytes:
     return df.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
 
 def export_to_excel(works_by_topic: Dict[str, List[Dict]]) -> bytes:
-    """Export results to Excel"""
+    """Export results to Excel with papers sorted from newest to oldest"""
     output = io.BytesIO()
     
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        # Main sheet
+        # Main sheet - собираем все статьи
         all_rows = []
         for topic, works in works_by_topic.items():
             for work in works:
@@ -2207,16 +2207,37 @@ def export_to_excel(works_by_topic: Dict[str, List[Dict]]) -> bytes:
         
         if all_rows:
             df_all = pd.DataFrame(all_rows)
+            
+            # СОРТИРОВКА: от новых к старым
+            # Сначала по году (убывание), затем по дате (убывание)
+            df_all = df_all.sort_values(
+                by=['publication_year', 'publication_date'], 
+                ascending=[False, False]  # False = descending (новые сверху)
+            )
+            
             df_all.to_excel(writer, sheet_name='All Papers', index=False)
         
-        # Separate sheets for each sub-topic
+        # Separate sheets for each sub-topic (тоже с сортировкой)
         for topic, works in works_by_topic.items():
             if works:
-                df_topic = pd.DataFrame([enrich_work_data(w) for w in works])
+                # Собираем данные для конкретной темы
+                topic_rows = []
+                for work in works:
+                    enriched = enrich_work_data(work)
+                    topic_rows.append(enriched)
+                
+                df_topic = pd.DataFrame(topic_rows)
+                
+                # СОРТИРОВКА для каждой темы
+                df_topic = df_topic.sort_values(
+                    by=['publication_year', 'publication_date'], 
+                    ascending=[False, False]
+                )
+                
                 sheet_name = re.sub(r'[^\w\s-]', '', topic)[:31]
                 df_topic.to_excel(writer, sheet_name=sheet_name, index=False)
         
-        # Formatting
+        # Formatting (оставляем как есть)
         workbook = writer.book
         header_format = workbook.add_format({
             'bold': True,
@@ -2230,9 +2251,20 @@ def export_to_excel(works_by_topic: Dict[str, List[Dict]]) -> bytes:
             if sheet_name == 'All Papers':
                 df = df_all
             else:
-                df = next((pd.DataFrame([enrich_work_data(w) for w in works]) 
-                          for t, works in works_by_topic.items() 
-                          if re.sub(r'[^\w\s-]', '', t)[:31] == sheet_name), None)
+                # Находим соответствующий DataFrame для текущего листа
+                df = None
+                for t, works in works_by_topic.items():
+                    if re.sub(r'[^\w\s-]', '', t)[:31] == sheet_name:
+                        # Создаем DataFrame с сортировкой
+                        temp_rows = []
+                        for work in works:
+                            temp_rows.append(enrich_work_data(work))
+                        df = pd.DataFrame(temp_rows)
+                        df = df.sort_values(
+                            by=['publication_year', 'publication_date'], 
+                            ascending=[False, False]
+                        )
+                        break
             
             if df is not None:
                 for col_num, col_name in enumerate(df.columns):
@@ -3263,4 +3295,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
