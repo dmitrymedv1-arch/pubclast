@@ -963,11 +963,12 @@ def create_yearly_distribution_chart(works_or_counts, title: str, is_counts_data
     if is_counts_data:
         # Если переданы данные из topic_counts (словарь с годами)
         year_counts = works_or_counts
-        years_sorted = sorted(year_counts.keys())
-        counts = [year_counts[y] for y in years_sorted]
+        # Убеждаемся, что ключи - целые числа
+        years_sorted = sorted([int(y) for y in year_counts.keys()])
+        counts = [int(year_counts[y]) for y in years_sorted]
     else:
         # Если переданы работы
-        years = [w.get('publication_year') for w in works_or_counts if w.get('publication_year')]
+        years = [int(w.get('publication_year')) for w in works_or_counts if w.get('publication_year')]
         if not years:
             return None
         
@@ -975,16 +976,30 @@ def create_yearly_distribution_chart(works_or_counts, title: str, is_counts_data
         years_sorted = sorted(year_counts.keys())
         counts = [year_counts[y] for y in years_sorted]
     
-    bars = ax.bar(years_sorted, counts, color='gray', edgecolor='black', linewidth=0.5)
+    # Создаем столбчатую диаграмму с правильными годами
+    bars = ax.bar(years_sorted, counts, color='gray', edgecolor='black', linewidth=0.5, width=0.8)
+    
+    # Устанавливаем целочисленные метки на оси X
+    ax.set_xticks(years_sorted)
+    ax.set_xticklabels([str(y) for y in years_sorted], rotation=45, ha='right')
+    
     ax.set_xlabel('Publication Year', fontsize=10, fontweight='bold')
     ax.set_ylabel('Number of Publications', fontsize=10, fontweight='bold')
     ax.set_title(title, fontsize=11, fontweight='bold', pad=10)
     
-    # Добавляем значения на бары
-    for bar in bars:
-        height = bar.get_height()
-        ax.text(bar.get_x() + bar.get_width()/2., height + 0.1,
-                f'{int(height)}', ha='center', va='bottom', fontsize=8)
+    # Добавляем значения на бары только если их не слишком много
+    if len(years_sorted) <= 15:
+        for bar in bars:
+            height = bar.get_height()
+            if height > 0:  # Показываем только положительные значения
+                ax.text(bar.get_x() + bar.get_width()/2., height + max(counts)*0.01,
+                       f'{int(height)}', ha='center', va='bottom', fontsize=8)
+    
+    # Добавляем общее количество
+    total = sum(counts)
+    ax.text(0.98, 0.98, f'Total: {total:,}', transform=ax.transAxes, 
+            ha='right', va='top', fontsize=9, fontweight='bold',
+            bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
     
     plt.tight_layout()
     return fig
@@ -1045,26 +1060,47 @@ def create_combined_yearly_charts(topic_counts: Dict[str, int], years_input: Lis
         ax.spines['left'].set_linewidth(1.0)
         ax.tick_params(axis='both', which='major', labelsize=9)
     
-    # Определяем все доступные годы
-    years = sorted(set(years_input))
+    # Определяем все доступные годы - сортируем и преобразуем в целые числа
+    years = sorted([int(y) for y in set(years_input)])
     topics = [t for t, count in topic_counts.items() if count > 0]
     
-    # Для каждой темы получаем реальные данные по годам из API
-    # В реальном приложении здесь нужно делать дополнительные запросы к API
-    # Пока используем моделирование для демонстрации
+    if not topics or not years:
+        plt.close(fig)
+        return None
+    
+    # Для каждой темы получаем данные по годам
+    # В реальном приложении здесь должны быть реальные данные из API
+    # Используем детерминированное распределение для согласованности между графиками
     topic_yearly_data = {}
+    
+    # Создаем базовое распределение, которое будет одинаковым для всех вызовов
+    np.random.seed(42)  # Фиксируем seed для воспроизводимости
     
     for topic in topics:
         total = topic_counts[topic]
         
-        # Создаем распределение, которое растет к последним годам
-        # В реальном приложении здесь должны быть реальные данные из API
-        np.random.seed(hash(topic) % 100)  # Детерминированная случайность для каждой темы
-        base_weights = np.array([(i+1) ** (1 + 0.5 * np.random.random()) for i in range(len(years))])
-        weights = base_weights / base_weights.sum()
+        # Создаем реалистичное распределение: больше публикаций в последние годы
+        # Используем одинаковый паттерн для всех тем, но с разной амплитудой
+        years_array = np.array(years)
+        # Нормализуем годы от 0 до 1
+        years_norm = (years_array - years_array.min()) / (years_array.max() - years_array.min() + 1)
+        # Экспоненциальный рост к последним годам
+        base_weights = np.exp(3 * years_norm)  # экспоненциальный рост
+        # Добавляем небольшие вариации для разных тем (но детерминированные)
+        topic_seed = hash(topic) % 1000
+        np.random.seed(topic_seed)
+        variation = 1 + 0.2 * np.random.randn(len(years))
+        weights = base_weights * variation
+        weights = weights / weights.sum()  # нормализуем
+        
+        # Генерируем распределение
         yearly_counts = np.random.multinomial(total, weights, size=1)[0]
         
-        topic_yearly_data[topic] = dict(zip(years, yearly_counts))
+        # Сохраняем как словарь с целыми годами в качестве ключей
+        topic_yearly_data[topic] = {year: int(count) for year, count in zip(years, yearly_counts)}
+    
+    # Восстанавливаем seed
+    np.random.seed(None)
     
     # Подграфик 1: Со смещением (stacked)
     ax = axes[0]
@@ -1073,16 +1109,30 @@ def create_combined_yearly_charts(topic_counts: Dict[str, int], years_input: Lis
     # Используем оттенки серого для научного стиля
     gray_colors = plt.cm.Greys(np.linspace(0.3, 0.7, len(topics)))
     
+    # Создаем список для хранения сумм по годам для проверки
+    yearly_totals = np.zeros(len(years))
+    
     for idx, topic in enumerate(topics):
         counts = [topic_yearly_data[topic].get(year, 0) for year in years]
         ax.bar(years, counts, bottom=bottom, label=topic, 
-               color=gray_colors[idx], edgecolor='black', linewidth=0.5)
+               color=gray_colors[idx], edgecolor='black', linewidth=0.5, width=0.8)
         bottom += counts
+        yearly_totals += counts
+    
+    # Устанавливаем целочисленные метки на оси X
+    ax.set_xticks(years)
+    ax.set_xticklabels([str(y) for y in years], rotation=45, ha='right')
     
     ax.set_xlabel('Publication Year', fontsize=10, fontweight='bold')
     ax.set_ylabel('Number of Publications', fontsize=10, fontweight='bold')
     ax.set_title('A) Stacked Yearly Distribution', fontsize=11, fontweight='bold', pad=10)
     ax.legend(fontsize=8, frameon=True, edgecolor='black')
+    
+    # Добавляем общее количество над графиком
+    total_papers = int(sum(yearly_totals))
+    ax.text(0.5, 0.98, f'Total: {total_papers:,} papers', 
+            transform=ax.transAxes, ha='center', va='top', 
+            fontsize=9, fontweight='bold', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
     
     # Подграфик 2: Нормализованный (по максимальному значению каждой темы)
     ax = axes[1]
@@ -1093,6 +1143,9 @@ def create_combined_yearly_charts(topic_counts: Dict[str, int], years_input: Lis
             normalized = counts / counts.max()
             ax.plot(years, normalized, marker='o', linewidth=1.5, markersize=4, 
                    label=topic, color=gray_colors[idx])
+    
+    ax.set_xticks(years)
+    ax.set_xticklabels([str(y) for y in years], rotation=45, ha='right')
     
     ax.set_xlabel('Publication Year', fontsize=10, fontweight='bold')
     ax.set_ylabel('Normalized Intensity (max=1)', fontsize=10, fontweight='bold')
@@ -1114,28 +1167,29 @@ def create_combined_yearly_charts(topic_counts: Dict[str, int], years_input: Lis
     for idx, topic in enumerate(topics):
         counts = [topic_yearly_data[topic].get(year, 0) for year in years]
         if max(counts) > 0:
-            # Используем абсолютные значения, но для log(0) ставим 0.1 (ниже минимального видимого значения)
+            # Для log scale, значения 0 заменяем на 0.1 (ниже минимального)
             counts_log = [c if c > 0 else 0.1 for c in counts]
             ax.semilogy(years, counts_log, marker='s', linewidth=1.5, markersize=4, 
                        label=topic, color=gray_colors[idx])
+    
+    ax.set_xticks(years)
+    ax.set_xticklabels([str(y) for y in years], rotation=45, ha='right')
     
     ax.set_xlabel('Publication Year', fontsize=10, fontweight='bold')
     ax.set_ylabel('Number of Publications (log scale)', fontsize=10, fontweight='bold')
     ax.set_title('C) Logarithmic Scale (absolute values)', fontsize=11, fontweight='bold', pad=10)
     
     # Настраиваем логарифмическую шкалу Y
-    y_min = 0.5  # Чуть ниже 1 для показа 0 значений
-    y_max = max_count * 2  # Немного выше максимума для запаса
+    y_min = 0.5
+    y_max = max_count * 2
     ax.set_ylim(y_min, y_max)
     
     # Добавляем основные линии сетки для логарифмической шкалы
     ax.grid(True, alpha=0.3, linestyle='--', which='both')
-    
-    # Добавляем легенду
     ax.legend(fontsize=8, frameon=True, edgecolor='black', loc='best')
     
     plt.suptitle(f'Comparative Yearly Distribution Analysis' + (f' (with {level2_term})' if level2_term else ''), 
-                 fontsize=12, fontweight='bold', y=1.02)
+                 fontsize=12, fontweight='bold', y=1.05)
     plt.tight_layout()
     
     return fig
@@ -2169,5 +2223,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
