@@ -2025,13 +2025,6 @@ def main():
                 progress_bar_yearly.empty()
                 status_text_yearly.empty()
         
-        # Навигационные кнопки - изменено на Back to Step 1
-        nav_col1, nav_col2, nav_col3 = st.columns([1, 1, 2])
-        
-        with nav_col1:
-            if st.button("← Back to Step 1", key="back_from_step3"):
-                st.session_state.step = 1
-                st.rerun()
         
         # Навигационные кнопки - изменено на Back to Step 1
         nav_col1, nav_col2, nav_col3 = st.columns([1, 1, 2])
@@ -2268,5 +2261,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
