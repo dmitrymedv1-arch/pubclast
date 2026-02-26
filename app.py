@@ -1909,7 +1909,7 @@ def main():
         with st.expander("🔧 Test Query Before Full Analysis"):
             if st.button("Test Current Query"):
                 with st.spinner("Testing query..."):
-                    temp_count = get_total_count(level1.strip(), level2.strip() or None, years)
+                    temp_count = get_total_count(level1.strip(), level2.strip() if level2 and isinstance(level2, str) else None, years)
                     
                     if temp_count > 0:
                         st.success(f"✅ Found {temp_count:,} papers matching your Level 1+2 criteria")
@@ -2298,4 +2298,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
