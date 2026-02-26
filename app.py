@@ -983,11 +983,11 @@ def calculate_gini_coefficient(citations: List[int]) -> float:
     Calculate Gini coefficient for citation distribution.
     Gini = 0 (perfect equality) to 1 (perfect inequality)
     """
-    if not citations:
+    if citations is None or len(citations) == 0:
         return 0.0
     
     citations = np.array(citations)
-    if np.sum(citations) == 0:
+    if len(citations) == 0 or np.sum(citations) == 0:
         return 0.0
     
     # Sort citations in ascending order
@@ -3263,3 +3263,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
