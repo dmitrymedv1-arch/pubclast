@@ -23,20 +23,15 @@ import logging
 import io
 from pathlib import Path
 import warnings
-from reportlab.lib.colors import HexColor
 warnings.filterwarnings('ignore')
 
-# ============================================================================
-# PDF EXPORT IMPORTS
-# ============================================================================
+# PDF экспорт
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.units import cm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, Image
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
 import os
 from PIL import Image as PILImage
 
@@ -194,7 +189,10 @@ if 'color_palette' not in st.session_state:
 
 colors = st.session_state['color_palette']
 
-# Научный стиль для matplotlib (НЕЗАВИСИМЫЙ от интерфейсной палитры)
+# ============================================================================
+# НАУЧНЫЙ СТИЛЬ ДЛЯ ГРАФИКОВ (НЕ ЗАВИСИТ ОТ ИНТЕРФЕЙСА)
+# ============================================================================
+
 plt.style.use('default')
 plt.rcParams.update({
     # Font sizes and weights
@@ -442,6 +440,111 @@ def clean_text(text: str) -> str:
     text = re.sub(r'<[^>]+>', '', text)
     return text.strip()
 
+def expand_wildcard(term: str) -> str:
+    """
+    Расширяет wildcard запросы вида electro* в OR комбинацию
+    """
+    if '*' not in term:
+        return term
+    
+    # Словарь часто используемых расширений для научных терминов
+    expansions = {
+        'electroly*': 'electrolyte OR electrolysis OR electrolyzer OR electrolytic OR electrolytical',
+        'cataly*': 'catalyst OR catalysis OR catalytic OR catalyzed',
+        'polymer*': 'polymer OR polymers OR polymeric OR polymerization',
+        'synthes*': 'synthesis OR synthetic OR synthesized OR synthesizing',
+        'spectro*': 'spectroscopy OR spectrometric OR spectrophotometry OR spectra',
+        'chromato*': 'chromatography OR chromatographic OR chromatogram',
+        'thermo*': 'thermodynamics OR thermodynamic OR thermal OR thermochemical',
+        'photo*': 'photo OR photos OR photochemical OR photocatalytic OR photoelectric',
+        'electro*': 'electro OR electrochemical OR electrochemistry OR electrode OR electrolyte',
+        'nano*': 'nano OR nanoparticles OR nanomaterial OR nanostructure OR nanotechnology',
+        'bio*': 'bio OR biological OR biochemistry OR biomedical OR biotechnology',
+        'chem*': 'chemistry OR chemical OR chemometrics',
+        'phys*': 'physics OR physical OR physicochemical',
+        'analy*': 'analysis OR analytical OR analyze OR analyzing',
+        'mater*': 'material OR materials OR material science',
+        'organ*': 'organic OR organometallic OR organism',
+        'inorg*': 'inorganic OR inorganics',
+        'metal*': 'metal OR metals OR metallic OR metallurgy',
+        'crystal*': 'crystal OR crystals OR crystalline OR crystallization',
+        'molec*': 'molecular OR molecule OR molecules',
+        'atom*': 'atomic OR atom OR atoms',
+        'quant*': 'quantum OR quantitative',
+        'comput*': 'computational OR computer OR computing OR computation',
+        'simul*': 'simulation OR simulate OR simulated',
+        'model*': 'model OR modeling OR models',
+        'experim*': 'experimental OR experiment OR experiments',
+        'theor*': 'theoretical OR theory',
+        'appli*': 'application OR applications OR applied',
+        'techni*': 'technique OR techniques OR technical',
+        'method*': 'method OR methods OR methodology',
+        'process*': 'process OR processes OR processing',
+        'react*': 'reaction OR reactions OR reactive OR reactivity',
+        'kinet*': 'kinetics OR kinetic',
+        'mechan*': 'mechanism OR mechanisms OR mechanistic',
+        'struct*': 'structure OR structures OR structural',
+        'proper*': 'property OR properties',
+        'charac*': 'characterization OR characterize OR characteristic',
+        'funct*': 'functional OR function OR functionality',
+        'surface*': 'surface OR surfaces OR interfacial',
+        'interfac*': 'interface OR interfaces OR interfacial',
+        'adsorp*': 'adsorption OR adsorbent OR adsorbed',
+        'absorp*': 'absorption OR absorbent OR absorbed',
+        'diffus*': 'diffusion OR diffusive',
+        'transp*': 'transport OR transportation',
+        'conduc*': 'conductivity OR conduction OR conductive',
+        'resist*': 'resistance OR resistive',
+        'capac*': 'capacitance OR capacitor OR capacitive',
+        'imped*': 'impedance OR impedimetric',
+        'voltam*': 'voltammetry OR voltammetric',
+        'ampero*': 'amperometry OR amperometric',
+        'potent*': 'potentiometry OR potentiometric OR potential',
+        'sensor*': 'sensor OR sensors OR sensing',
+        'detect*': 'detection OR detector OR detecting',
+        'measure*': 'measurement OR measuring OR measure',
+        'calibr*': 'calibration OR calibrated',
+        'valid*': 'validation OR validate OR valid',
+        'optim*': 'optimization OR optimize OR optimal',
+        'design*': 'design OR designing',
+        'develop*': 'development OR developing OR developed',
+        'fabric*': 'fabrication OR fabricate OR fabricated',
+        'prepar*': 'preparation OR prepare OR prepared',
+        'synthe*': 'synthesis OR synthesize OR synthesized',
+        'produc*': 'production OR produce OR produced',
+        'sourc*': 'source OR sources',
+        'energy*': 'energy OR energies',
+        'power*': 'power OR powered',
+        'fuel*': 'fuel OR fuels',
+        'batter*': 'battery OR batteries',
+        'cell*': 'cell OR cells',
+        'device*': 'device OR devices',
+        'system*': 'system OR systems',
+        'array*': 'array OR arrays',
+        'network*': 'network OR networks',
+        'compos*': 'composite OR composites',
+        'hybrid*': 'hybrid OR hybrids',
+        'alloy*': 'alloy OR alloys',
+        'oxide*': 'oxide OR oxides',
+        'sulfi*': 'sulfide OR sulfides',
+        'nitri*': 'nitride OR nitrides',
+        'carbi*': 'carbide OR carbides',
+        'phosph*': 'phosphate OR phosphide OR phosphorus',
+        'halid*': 'halide OR halides',
+        'chl*': 'chloride OR chlorine OR chloro',
+        'fluor*': 'fluoride OR fluorine OR fluoro',
+        'brom*': 'bromide OR bromine OR bromo',
+        'iod*': 'iodide OR iodine OR iodo'
+    }
+    
+    # Проверяем точное совпадение с известными расширениями
+    if term.lower() in expansions:
+        return expansions[term.lower()]
+    
+    # Если нет точного совпадения, возвращаем исходный термин
+    # OpenAlex поддерживает wildcard поиск через *
+    return term
+
 def parse_query_terms(term: str) -> str:
     """
     Парсит поисковый термин для OpenAlex API.
@@ -449,23 +552,13 @@ def parse_query_terms(term: str) -> str:
     - Простые слова
     - Фразы в кавычках
     - Логические операторы: AND, OR, NOT
-    - Wildcard (*) для поиска по корню слова
+    - Wildcard запросы (electroly*)
     """
     term = term.strip()
     
-    # Обработка wildcard (звездочка)
+    # Проверяем на wildcard
     if '*' in term:
-        # Если это просто wildcard термин типа "electroly*"
-        if term.endswith('*') and not (' ' in term or 'OR' in term.upper() or '"' in term):
-            # Для OpenAlex wildcard не поддерживается напрямую, поэтому создаем OR запрос
-            # с常见 вариантами окончаний
-            base = term[:-1]  # убираем звездочку
-            # Типичные окончания для научных терминов
-            suffixes = ['', 'e', 'es', 'ed', 'ing', 'ion', 'ions', 'ic', 'ical', 'ly', 'sis', 'tic', 'al', 'ize', 'izer']
-            variants = [f'"{base}{suffix}"' if ' ' in base+suffix else f'{base}{suffix}' for suffix in suffixes]
-            # Убираем пустые варианты и объединяем через OR
-            variants = [v for v in variants if v.strip('"')]
-            return ' OR '.join(variants)
+        term = expand_wildcard(term)
     
     # Если это фраза в кавычках, оставляем как есть
     if term.startswith('"') and term.endswith('"'):
@@ -550,36 +643,24 @@ def create_result_card(work: dict, index: int, topic: str):
     </div>
     """, unsafe_allow_html=True)
 
-def navigation_buttons(show_back: bool = True, show_new: bool = True, back_to_step1: bool = False):
+def navigation_buttons(show_back: bool = True, show_new: bool = True):
     """Отображает кнопки навигации"""
     col1, col2, col3 = st.columns([1, 1, 2])
     
     with col1:
         if show_back and st.session_state.step > 1:
-            target_step = 1 if back_to_step1 else st.session_state.step - 1
-            button_text = "← Back to Step 1" if back_to_step1 else "← Back"
-            if st.button(button_text, key="back_btn", use_container_width=True):
-                st.session_state.step = target_step
+            if st.button("← Back", key="back_btn", use_container_width=True):
+                st.session_state.step -= 1
                 st.rerun()
     
     with col2:
         if show_new:
             if st.button("🔄 New Search", key="new_btn", use_container_width=True):
-                # Очищаем сессию, НО сохраняем введенные термины
-                level1_input = st.session_state.get('level1_input', '')
-                level2_input = st.session_state.get('level2_input', '')
-                level3_input = st.session_state.get('level3_input', [])
-                years_input = st.session_state.get('years_input', [])
-                
-                for key in ['step', 'results', 'topic_counts', 'level1_count', 'level2_count']:
+                # Очищаем сессию
+                for key in ['step', 'results', 'topic_counts', 'level1_count', 'level2_count',
+                           'level1_input', 'level2_input', 'level3_input', 'years_input']:
                     if key in st.session_state:
                         del st.session_state[key]
-                
-                # Восстанавливаем введенные термины
-                st.session_state['level1_input'] = level1_input
-                st.session_state['level2_input'] = level2_input
-                st.session_state['level3_input'] = level3_input
-                st.session_state['years_input'] = years_input
                 st.session_state.step = 1
                 st.rerun()
 
@@ -597,14 +678,17 @@ def build_search_filter(level1_term: str, level2_term: Optional[str] = None,
     
     # Уровень 1 - основной термин
     if level1_term:
-        search_parts.append(f"({parse_query_terms(level1_term)})")
+        parsed = parse_query_terms(level1_term)
+        search_parts.append(parsed)
     
     # Уровень 2 - дополнительный термин (опционально)
     if level2_term:
-        search_parts.append(f"({parse_query_terms(level2_term)})")
+        parsed = parse_query_terms(level2_term)
+        search_parts.append(parsed)
     
     # Объединяем все части с AND
     if search_parts:
+        # Используем default.search вместо title_and_abstract.search для лучших результатов
         filters['default.search'] = ' AND '.join(search_parts)
     
     # Фильтр по годам
@@ -612,6 +696,7 @@ def build_search_filter(level1_term: str, level2_term: Optional[str] = None,
         if len(years) == 1:
             filters['publication_year'] = str(years[0])
         else:
+            # Для диапазона используем формат from:to
             filters['publication_year'] = f"{min(years)}-{max(years)}"
     
     return filters
@@ -623,12 +708,14 @@ def build_level3_filter(level3_term: str, base_filters: Dict[str, str]) -> str:
     if 'publication_year' in base_filters:
         filter_parts.append(f"publication_year:{base_filters['publication_year']}")
     
+    # Собираем поисковые части
     search_parts = []
     if 'default.search' in base_filters:
         search_parts.append(f"({base_filters['default.search']})")
     
     if level3_term:
-        search_parts.append(f"({parse_query_terms(level3_term)})")
+        parsed = parse_query_terms(level3_term)
+        search_parts.append(f"({parsed})")
     
     if search_parts:
         filter_parts.append(f"default.search:{' AND '.join(search_parts)}")
@@ -782,6 +869,37 @@ def fetch_top_works(level1_term: str, level2_term: Optional[str],
     
     return all_works[:limit]
 
+def fetch_yearly_distribution(level1_term: str, level2_term: Optional[str],
+                             level3_term: str, years: Optional[List[int]]) -> Dict[int, int]:
+    """
+    Получает распределение по годам для конкретного термина третьего уровня
+    Используется для синхронизации данных между разными графиками
+    """
+    base_filters = build_search_filter(level1_term, level2_term, years=years)
+    filter_str = build_level3_filter(level3_term, base_filters)
+    
+    yearly_counts = {}
+    
+    # Для каждого года из запрошенного диапазона получаем количество
+    for year in years:
+        year_filter = f"{filter_str},publication_year:{year}"
+        
+        params = {
+            'filter': year_filter,
+            'per-page': 1
+        }
+        
+        data = make_openalex_request(f"{OPENALEX_BASE_URL}/works", params)
+        
+        if data and 'meta' in data:
+            yearly_counts[year] = data['meta'].get('count', 0)
+        else:
+            yearly_counts[year] = 0
+        
+        time.sleep(0.1)  # Небольшая задержка между запросами
+    
+    return yearly_counts
+
 def enrich_work_data(work: Dict) -> Dict:
     """Обогащает данные работы дополнительными полями"""
     if not work:
@@ -828,36 +946,6 @@ def enrich_work_data(work: Dict) -> Dict:
     
     return enriched
 
-def get_yearly_distribution(level1_term: str, level2_term: Optional[str], 
-                           level3_term: str, years: Optional[List[int]]) -> Dict[int, int]:
-    """
-    Получает реальное распределение по годам для конкретной подтемы
-    """
-    base_filters = build_search_filter(level1_term, level2_term)
-    filter_str = build_level3_filter(level3_term, base_filters)
-    
-    yearly_counts = {}
-    
-    for year in years:
-        # Для каждого года создаем фильтр с конкретным годом
-        year_filter = f"{filter_str},publication_year:{year}"
-        
-        params = {
-            'filter': year_filter,
-            'per-page': 1
-        }
-        
-        data = make_openalex_request(f"{OPENALEX_BASE_URL}/works", params)
-        
-        if data and 'meta' in data:
-            yearly_counts[year] = data['meta'].get('count', 0)
-        else:
-            yearly_counts[year] = 0
-        
-        time.sleep(0.1)  # Небольшая задержка между запросами
-    
-    return yearly_counts
-
 # ============================================================================
 # ФУНКЦИИ ДЛЯ ВИЗУАЛИЗАЦИИ (НАУЧНЫЙ СТИЛЬ)
 # ============================================================================
@@ -881,9 +969,9 @@ def create_scientific_bar_chart(data: Dict[str, int], level2_count: int, title: 
     counts = [counts[i] for i in sorted_idx]
     percentages = [percentages[i] for i in sorted_idx]
     
-    # Цвета в научном стиле (оттенки серого)
+    # Цвета в научном стиле (оттенки серого для печати)
     colors1 = plt.cm.Greys(np.linspace(0.3, 0.7, len(topics)))
-    colors2 = plt.cm.Greys(np.linspace(0.3, 0.7, len(topics)))
+    colors2 = plt.cm.Greys(np.linspace(0.4, 0.8, len(topics)))
     
     # График количества
     bars1 = ax1.barh(range(len(topics)), counts, color=colors1, edgecolor='black', linewidth=0.5)
@@ -930,7 +1018,7 @@ def create_yearly_distribution_chart(yearly_data: Dict[int, int], title: str):
     
     fig, ax = plt.subplots(figsize=(10, 5))
     
-    bars = ax.bar(years_sorted, counts, color='#4C72B0', edgecolor='black', linewidth=0.5)
+    bars = ax.bar(years_sorted, counts, color='#666666', edgecolor='black', linewidth=0.5)
     ax.set_xlabel('Publication Year', fontsize=10, fontweight='bold')
     ax.set_ylabel('Number of Publications', fontsize=10, fontweight='bold')
     ax.set_title(title, fontsize=11, fontweight='bold', pad=10)
@@ -941,22 +1029,23 @@ def create_yearly_distribution_chart(yearly_data: Dict[int, int], title: str):
     # Добавляем значения на бары
     for bar in bars:
         height = bar.get_height()
-        ax.text(bar.get_x() + bar.get_width()/2., height + 0.1,
-                f'{int(height)}', ha='center', va='bottom', fontsize=8)
+        if height > 0:  # Показываем только для ненулевых значений
+            ax.text(bar.get_x() + bar.get_width()/2., height + 0.1,
+                    f'{int(height)}', ha='center', va='bottom', fontsize=8)
     
     plt.tight_layout()
     return fig
 
 def create_citation_distribution_chart(works: List[Dict], title: str):
     """Создает график распределения цитирований"""
-    citations = [w.get('cited_by_count', 0) for w in works]
+    citations = [w.get('cited_by_count', 0) for w in works if w.get('cited_by_count', 0) is not None]
     if not citations:
         return None
     
     fig, ax = plt.subplots(figsize=(10, 5))
     
     # Создаем гистограмму
-    n, bins, patches = ax.hist(citations, bins=20, color='#55A868', 
+    n, bins, patches = ax.hist(citations, bins=20, color='#666666', 
                                edgecolor='black', linewidth=0.5, alpha=0.7)
     
     ax.set_xlabel('Number of Citations', fontsize=10, fontweight='bold')
@@ -977,32 +1066,30 @@ def create_citation_distribution_chart(works: List[Dict], title: str):
     return fig
 
 def create_combined_yearly_charts(topic_yearly_data: Dict[str, Dict[int, int]], 
+                                  years_input: List[int], 
                                   level2_term: Optional[str] = None):
     """
     Создает комбинированный график с годовыми распределениями для всех подтем
-    на основе РЕАЛЬНЫХ данных
+    Использует реальные данные, полученные через fetch_yearly_distribution
     """
-    if not topic_yearly_data:
-        return None
-    
     # Создаем фигуру с тремя подграфиками
     fig, axes = plt.subplots(1, 3, figsize=(18, 6))
     
-    # Определяем все доступные годы из первого набора данных
-    all_years = set()
-    for data in topic_yearly_data.values():
-        all_years.update(data.keys())
-    years = sorted(all_years)
+    # Определяем все доступные годы
+    years = sorted(set(years_input))
+    topics = [t for t in topic_yearly_data.keys()]
     
     # Подграфик 1: Со смещением (stacked)
     ax = axes[0]
     bottom = np.zeros(len(years))
-    colors_stack = plt.cm.Set3(np.linspace(0, 1, len(topic_yearly_data)))
     
-    for idx, (topic, data) in enumerate(topic_yearly_data.items()):
-        counts = [data.get(year, 0) for year in years]
+    # Используем оттенки серого для печати
+    gray_colors = [plt.cm.Greys(0.3 + i*0.1) for i in range(len(topics))]
+    
+    for idx, topic in enumerate(topics):
+        counts = [topic_yearly_data[topic].get(year, 0) for year in years]
         ax.bar(years, counts, bottom=bottom, label=topic, 
-               color=colors_stack[idx], edgecolor='black', linewidth=0.5, alpha=0.7)
+               color=gray_colors[idx], edgecolor='black', linewidth=0.5)
         bottom += counts
     
     ax.set_xlabel('Publication Year', fontsize=10, fontweight='bold')
@@ -1016,11 +1103,12 @@ def create_combined_yearly_charts(topic_yearly_data: Dict[str, Dict[int, int]],
     # Подграфик 2: Нормализованный (по максимальному значению каждой темы)
     ax = axes[1]
     
-    for topic, data in topic_yearly_data.items():
-        counts = np.array([data.get(year, 0) for year in years])
+    for idx, topic in enumerate(topics):
+        counts = np.array([topic_yearly_data[topic].get(year, 0) for year in years])
         if counts.max() > 0:
             normalized = counts / counts.max()
-            ax.plot(years, normalized, marker='o', linewidth=1.5, markersize=4, label=topic)
+            ax.plot(years, normalized, marker='o', linewidth=1.5, markersize=4, 
+                   color=gray_colors[idx], label=topic)
     
     ax.set_xlabel('Publication Year', fontsize=10, fontweight='bold')
     ax.set_ylabel('Normalized Intensity (max=1)', fontsize=10, fontweight='bold')
@@ -1037,16 +1125,18 @@ def create_combined_yearly_charts(topic_yearly_data: Dict[str, Dict[int, int]],
     
     # Находим глобальный максимум для настройки оси Y
     all_counts = []
-    for data in topic_yearly_data.values():
-        all_counts.extend(data.values())
+    for topic in topics:
+        counts = [topic_yearly_data[topic].get(year, 0) for year in years]
+        all_counts.extend(counts)
     max_count = max(all_counts) if all_counts else 1
     
-    for topic, data in topic_yearly_data.items():
-        counts = [data.get(year, 0) for year in years]
+    for idx, topic in enumerate(topics):
+        counts = [topic_yearly_data[topic].get(year, 0) for year in years]
         if max(counts) > 0:
             # Используем абсолютные значения, но для log(0) ставим 0.1 (ниже минимального видимого значения)
             counts_log = [c if c > 0 else 0.1 for c in counts]
-            ax.semilogy(years, counts_log, marker='s', linewidth=1.5, markersize=4, label=topic)
+            ax.semilogy(years, counts_log, marker='s', linewidth=1.5, markersize=4, 
+                       color=gray_colors[idx], label=topic)
     
     ax.set_xlabel('Publication Year', fontsize=10, fontweight='bold')
     ax.set_ylabel('Number of Publications (log scale)', fontsize=10, fontweight='bold')
@@ -1074,7 +1164,8 @@ def create_combined_yearly_charts(topic_yearly_data: Dict[str, Dict[int, int]],
 
 def create_tree_visualization(topic_counts: Dict[str, int], level1_term: str, level2_term: Optional[str] = None):
     """
-    Создает древовидную визуализацию в научном стиле
+    Создает древовидную визуализацию в научном стиле с толщиной веток, 
+    пропорциональной количеству публикаций
     """
     topics = [t for t, count in topic_counts.items() if count > 0]
     if not topics:
@@ -1084,125 +1175,137 @@ def create_tree_visualization(topic_counts: Dict[str, int], level1_term: str, le
     topics_sorted = sorted(topics, key=lambda x: topic_counts[x], reverse=True)
     counts = [topic_counts[t] for t in topics_sorted]
     max_count = max(counts) if counts else 1
+    total_count = sum(counts)
     
-    # Создаем фигуру с научным оформлением
-    fig, ax = plt.subplots(figsize=(14, 10), facecolor='white')
+    # Создаем фигуру с научным стилем
+    fig, ax = plt.subplots(figsize=(14, 8))
+    
+    # Настройки для научного стиля
     ax.set_facecolor('white')
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+    ax.spines['bottom'].set_visible(False)
+    ax.set_xticks([])
+    ax.set_yticks([])
     
-    # Параметры дерева
-    tree_height = 8
-    trunk_width = 1.5
+    # Рисуем корневую систему
+    # Главный ствол - более реалистичный
+    from matplotlib.patches import Polygon
     
-    # Рисуем ствол (прямоугольник)
-    trunk = plt.Rectangle((-trunk_width/2, 0), trunk_width, tree_height, 
-                          facecolor='#8B4513', edgecolor='black', linewidth=1, alpha=0.8)
+    # Координаты для ствола (трапеция для реалистичности)
+    trunk_width = 0.15 + 0.1 * (total_count / 10000)  # Ширина зависит от общего количества
+    trunk_points = [
+        [-trunk_width/2, 0],
+        [trunk_width/2, 0],
+        [trunk_width/3, 1],
+        [-trunk_width/3, 1]
+    ]
+    trunk = Polygon(trunk_points, closed=True, facecolor='#555555', edgecolor='black', linewidth=1, alpha=0.8)
     ax.add_patch(trunk)
     
     # Добавляем текстуру коры (линии)
-    for y in np.linspace(0.5, tree_height-0.5, 15):
-        ax.plot([-trunk_width/2, trunk_width/2], [y, y], 
-                color='#5D3A1A', linewidth=0.5, alpha=0.5)
+    for y in np.linspace(0.1, 0.9, 8):
+        ax.plot([-trunk_width/4, trunk_width/4], [y, y], color='black', linewidth=0.3, alpha=0.3)
     
-    # Позиции для веток
-    branch_positions = np.linspace(tree_height * 0.3, tree_height * 0.9, len(topics_sorted))
-    
-    # Цвета для листьев/плодов (научная цветовая схема)
-    leaf_colors = plt.cm.YlGn(np.linspace(0.3, 0.9, len(topics_sorted)))
-    
-    for i, (topic, count, y_pos, color) in enumerate(zip(topics_sorted, counts, branch_positions, leaf_colors)):
-        # Нормализованная толщина ветки (от 0.2 до 0.8)
-        branch_width = 0.2 + 0.6 * (count / max_count)
-        
-        # Длина ветки пропорциональна количеству
-        branch_length = 2 + 3 * (count / max_count)
-        
-        # Рисуем ветку (с изгибом для реалистичности)
-        x_start = trunk_width/2
-        x_end = x_start + branch_length
-        y_start = y_pos
-        
-        # Создаем изогнутую ветку с помощью кривой Безье
-        # Контрольные точки для изгиба вверх
-        control_x = x_start + branch_length * 0.4
-        control_y = y_start + 0.5
-        control_x2 = x_start + branch_length * 0.7
-        control_y2 = y_start - 0.2
-        
-        # Рисуем ветку
-        t = np.linspace(0, 1, 50)
-        # Кубическая кривая Безье
-        x = (1-t)**3 * x_start + 3*(1-t)**2*t * control_x + 3*(1-t)*t**2 * control_x2 + t**3 * x_end
-        y = (1-t)**3 * y_start + 3*(1-t)**2*t * control_y + 3*(1-t)*t**2 * control_y2 + t**3 * y_start
-        ax.plot(x, y, color='#8B4513', linewidth=branch_width*2, alpha=0.9)
-        
-        # Добавляем маленькие веточки
-        num_twigs = max(2, int(count / max_count * 5))
-        for j in range(num_twigs):
-            t_twig = 0.3 + 0.6 * j / num_twigs
-            x_twig = (1-t_twig)**3 * x_start + 3*(1-t_twig)**2*t_twig * control_x + 3*(1-t_twig)*t_twig**2 * control_x2 + t_twig**3 * x_end
-            y_twig = (1-t_twig)**3 * y_start + 3*(1-t_twig)**2*t_twig * control_y + 3*(1-t_twig)*t_twig**2 * control_y2 + t_twig**3 * y_start
-            
-            # Маленькая веточка вверх или вниз
-            angle = np.random.uniform(-30, 30) * np.pi/180
-            twig_length = 0.5
-            x_twig_end = x_twig + twig_length * np.cos(angle)
-            y_twig_end = y_twig + twig_length * np.sin(angle)
-            ax.plot([x_twig, x_twig_end], [y_twig, y_twig_end], 
-                   color='#A0522D', linewidth=1, alpha=0.6)
-        
-        # Добавляем листья/плоды (размер пропорционален количеству)
-        leaf_size = 50 + 200 * (count / max_count)
-        
-        # Позиция для листьев - на конце ветки
-        leaf_x = x_end
-        leaf_y = y_start
-        
-        # Рисуем несколько листьев/плодов
-        for k in range(3):
-            offset_x = np.random.uniform(-0.3, 0.3)
-            offset_y = np.random.uniform(-0.3, 0.3)
-            ax.scatter(leaf_x + offset_x, leaf_y + offset_y, 
-                      s=leaf_size * (0.7 + 0.3*k/3), 
-                      c=[color], 
-                      edgecolor='black', linewidth=0.5, alpha=0.8, zorder=5)
-        
-        # Добавляем метку с количеством
-        label_x = leaf_x + 0.8
-        label_y = leaf_y
-        ax.annotate(f'{topic}\n({count:,})', 
-                   xy=(leaf_x, leaf_y), xytext=(label_x, label_y),
-                   arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0.2',
-                                 color='black', lw=0.5),
-                   bbox=dict(boxstyle='round,pad=0.3', facecolor='white', 
-                           edgecolor='black', alpha=0.9),
-                   fontsize=9, ha='left', va='center')
-    
-    # Добавляем корни
-    root_y = -1
-    for i in range(3):
-        root_x = -trunk_width/2 + i * trunk_width/2
-        root_length = 1 + np.random.random()
-        ax.plot([root_x, root_x - 1], [root_y, root_y - 1], 
-                color='#8B4513', linewidth=1.5, alpha=0.7)
-        ax.plot([root_x, root_x + 1], [root_y, root_y - 1], 
-                color='#8B4513', linewidth=1.5, alpha=0.7)
-    
-    # Добавляем метку корня/ствола
+    # Добавляем метку корня
     root_label = level1_term
     if level2_term:
-        root_label += f'\n+ {level2_term}'
-    ax.text(0, tree_height/2, root_label, 
-           ha='center', va='center', fontsize=12, fontweight='bold',
-           bbox=dict(boxstyle='round,pad=0.5', facecolor='white', 
-                    edgecolor='black', alpha=0.9))
+        root_label += f"\n+ {level2_term}"
+    ax.text(0, 0.5, root_label, ha='center', va='center', fontsize=12, fontweight='bold',
+            bbox=dict(boxstyle="round,pad=0.3", facecolor='white', edgecolor='black', linewidth=1))
+    
+    # Рисуем ветви для каждой подтемы
+    n_topics = len(topics_sorted)
+    
+    # Распределяем ветви по кругу для более реалистичного вида
+    angles = np.linspace(-np.pi/3, np.pi/3, n_topics)
+    
+    for i, (topic, count) in enumerate(zip(topics_sorted, counts)):
+        # Нормализованная толщина ветки (от 1 до 6)
+        branch_width = 1 + 5 * (count / max_count)
+        
+        # Угол ветки
+        angle = angles[i]
+        
+        # Длина ветки (пропорциональна количеству)
+        branch_length = 0.8 + 0.4 * (count / max_count)
+        
+        # Начальная точка на стволе
+        x0 = 0.2 * np.sin(angle)
+        y0 = 0.7
+        
+        # Точка изгиба
+        x_mid = x0 + branch_length * 0.3 * np.cos(angle)
+        y_mid = y0 + branch_length * 0.4
+        
+        # Конечная точка
+        x_end = x0 + branch_length * np.cos(angle)
+        y_end = y0 + branch_length * 0.8
+        
+        # Рисуем ветку с градиентом толщины
+        from matplotlib.collections import LineCollection
+        from matplotlib.path import Path
+        
+        # Создаем изогнутую ветку
+        t = np.linspace(0, 1, 20)
+        x_branch = x0 + branch_length * t * np.cos(angle) + 0.1 * np.sin(t * np.pi)
+        y_branch = y0 + branch_length * t * 0.8
+        
+        # Толщина ветки уменьшается к концу
+        widths = np.linspace(branch_width, branch_width * 0.4, len(x_branch))
+        
+        # Рисуем ветку как набор сегментов с переменной толщиной
+        points = np.array([x_branch, y_branch]).T.reshape(-1, 1, 2)
+        segments = np.concatenate([points[:-1], points[1:]], axis=1)
+        
+        lc = LineCollection(segments, linewidths=widths[:-1], color='#666666', alpha=0.8)
+        ax.add_collection(lc)
+        
+        # Добавляем листочки/плоды (кружки, размер пропорционален количеству)
+        leaf_size = 50 + 200 * (count / max_count)
+        
+        # Используем разные маркеры для разных тем
+        markers = ['o', 's', '^', 'D', 'v', '<', '>', 'p', '*', 'h']
+        marker = markers[i % len(markers)]
+        
+        ax.scatter(x_end, y_end, s=leaf_size, c='white', marker=marker,
+                  edgecolor='black', linewidth=1.5, alpha=0.9, zorder=5)
+        
+        # Добавляем вторую точку для объема
+        ax.scatter(x_end, y_end, s=leaf_size*0.3, c='#333333', marker=marker,
+                  edgecolor='none', alpha=0.5, zorder=6)
+        
+        # Добавляем метку с количеством
+        ax.text(x_end + 0.15, y_end, f"{topic}\n(n={count:,})", 
+                va='center', fontsize=9, 
+                bbox=dict(boxstyle="round,pad=0.2", facecolor='white', edgecolor='black', linewidth=0.8))
+        
+        # Добавляем небольшие дополнительные веточки для больших тем
+        if count > max_count * 0.3:
+            for j in range(2):
+                small_angle = angle + 0.1 * (-1)**j
+                small_x = x_end - 0.05
+                small_y = y_end - 0.05
+                small_x_end = small_x + 0.2 * np.cos(small_angle)
+                small_y_end = small_y + 0.1
+                ax.plot([small_x, small_x_end], [small_y, small_y_end], 
+                       color='#666666', linewidth=1, alpha=0.4)
+                ax.scatter(small_x_end, small_y_end, s=10, c='white', 
+                          edgecolor='black', linewidth=0.5, alpha=0.6)
+    
+    # Добавляем масштабный бар
+    scale_bar_y = -0.1
+    ax.plot([-0.5, 0.5], [scale_bar_y, scale_bar_y], 'k-', linewidth=1)
+    ax.text(0, scale_bar_y - 0.05, f'Scale: 1.0 (relative units)', 
+            ha='center', va='top', fontsize=8, style='italic')
     
     # Настройки графика
-    ax.set_xlim(-3, 12)
-    ax.set_ylim(-3, tree_height + 1)
+    ax.set_xlim(-1.2, 2.0)
+    ax.set_ylim(-0.2, 2.0)
     ax.set_aspect('equal')
-    ax.axis('off')
     
-    plt.title('Hierarchical Tree Diagram of Research Topics', 
+    plt.title('Topic Tree: Hierarchical Structure\n(Branch thickness ∝ publication count)', 
               fontsize=14, fontweight='bold', pad=20)
     plt.tight_layout()
     
@@ -1277,16 +1380,17 @@ def export_to_excel(works_by_topic: Dict[str, List[Dict]]) -> bytes:
     
     return output.getvalue()
 
-def export_to_pdf(works_by_topic: Dict[str, List[Dict]], topic_counts: Dict[str, int],
-                  level1_term: str, level2_term: Optional[str], years: List[int]) -> bytes:
-    """Экспортирует результаты в PDF с научным оформлением"""
+def generate_pdf(data: Dict[str, List[Dict]], topic_counts: Dict[str, int], 
+                 level1_term: str, level2_term: Optional[str], 
+                 level3_terms: List[str], years_input: List[int]) -> bytes:
+    """Генерация PDF файла с результатами анализа"""
     
     # Вспомогательная функция для очистки текста
-    def clean_text_for_pdf(text):
+    def clean_text(text):
         if not text:
             return ""
         # Заменяем HTML сущности и теги
-        text = re.sub(r'<[^>]+>', '', str(text))
+        text = re.sub(r'<[^>]+>', '', text)  # Удаляем HTML теги
         text = text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
         return text
     
@@ -1350,24 +1454,12 @@ def export_to_pdf(works_by_topic: Dict[str, List[Dict]], topic_counts: Dict[str,
         fontName='Helvetica-Oblique'
     )
     
-    # Стиль для названия темы в результатах
-    topic_header_style = ParagraphStyle(
-        'TopicHeader',
-        parent=styles['Heading4'],
-        fontSize=13,
-        textColor=colors.HexColor('#2980B9'),
-        spaceAfter=8,
-        spaceBefore=12,
-        alignment=TA_LEFT,
-        fontName='Helvetica-Bold'
-    )
-    
     # Стиль для названия статьи
     paper_title_style = ParagraphStyle(
         'CustomPaperTitle',
-        parent=styles['Normal'],
+        parent=styles['Heading4'],
         fontSize=11,
-        textColor=colors.HexColor('#2C3E50'),
+        textColor=colors.HexColor('#2980B9'),
         spaceAfter=4,
         alignment=TA_LEFT,
         fontName='Helvetica-Bold'
@@ -1406,6 +1498,17 @@ def export_to_pdf(works_by_topic: Dict[str, List[Dict]], topic_counts: Dict[str,
         fontName='Helvetica-Bold'
     )
     
+    # Стиль для нижнего колонтитула
+    footer_style = ParagraphStyle(
+        'CustomFooter',
+        parent=styles['Normal'],
+        fontSize=8,
+        textColor=colors.HexColor('#95A5A6'),
+        spaceBefore=15,
+        alignment=TA_CENTER,
+        fontName='Helvetica-Oblique'
+    )
+    
     # Стиль для разделителя
     separator_style = ParagraphStyle(
         'CustomSeparator',
@@ -1422,7 +1525,7 @@ def export_to_pdf(works_by_topic: Dict[str, List[Dict]], topic_counts: Dict[str,
     link_style = ParagraphStyle(
         'CustomLink',
         parent=styles['Normal'],
-        fontSize=8,
+        fontSize=9,
         textColor=colors.blue,
         spaceAfter=2,
         alignment=TA_LEFT,
@@ -1430,222 +1533,218 @@ def export_to_pdf(works_by_topic: Dict[str, List[Dict]], topic_counts: Dict[str,
         underline=True
     )
     
-    # Стиль для нижнего колонтитула
-    footer_style = ParagraphStyle(
-        'CustomFooter',
-        parent=styles['Normal'],
-        fontSize=8,
-        textColor=colors.HexColor('#95A5A6'),
-        spaceBefore=15,
-        alignment=TA_CENTER,
-        fontName='Helvetica-Oblique'
-    )
-    
     story = []
     
-    # ========== ТИТУЛЬНАЯ СТРАНИЦА ==========
+    # ========== ЗАГОЛОВОЧНАЯ СТРАНИЦА ==========
     
-    story.append(Spacer(1, 3*cm))
-    story.append(Paragraph("Publication Clustering Analysis Report", title_style))
     story.append(Spacer(1, 1*cm))
     
+    # Заголовок
+    story.append(Paragraph("Publication Clustering Report", title_style))
+    story.append(Paragraph("Multi-Level Literature Analysis", subtitle_style))
+    story.append(Spacer(1, 0.8*cm))
+    
     # Информация о запросе
-    query_text = f"Level 1: {clean_text_for_pdf(level1_term)}"
+    query_info = f"Level 1: {level1_term}"
     if level2_term:
-        query_text += f"<br/>Level 2: {clean_text_for_pdf(level2_term)}"
-    story.append(Paragraph(query_text, subtitle_style))
+        query_info += f"<br/>Level 2: {level2_term}"
+    query_info += f"<br/>Level 3 terms: {', '.join(level3_terms)}"
+    query_info += f"<br/>Years: {min(years_input)}-{max(years_input)}"
+    
+    story.append(Paragraph(query_info, topic_style))
     story.append(Spacer(1, 0.5*cm))
     
-    # Информация о годах
-    year_text = f"Publication Years: {min(years)} - {max(years)}"
-    story.append(Paragraph(year_text, meta_style))
-    story.append(Spacer(1, 0.5*cm))
-    
-    # Дата генерации
+    # Мета-информация
     current_date = datetime.now().strftime('%B %d, %Y at %H:%M')
     story.append(Paragraph(f"Generated on {current_date}", meta_style))
-    story.append(Spacer(1, 2*cm))
     
-    # Копирайт
+    # Статистика
+    total_papers = sum(topic_counts.values())
+    topics_with_results = sum(1 for v in data.values() if v)
+    top_papers_found = sum(len(works) for works in data.values())
+    
+    stats_text = f"""
+    Total papers matching criteria: {total_papers:,} | 
+    Topics with results: {topics_with_results} | 
+    Top papers analyzed: {top_papers_found}
+    """
+    story.append(Paragraph(stats_text, meta_style))
+    
+    story.append(Spacer(1, 1.5*cm))
+    
+    # Копирайт информация
     story.append(Paragraph("© Publication Clustering", footer_style))
+    
+    # Разделитель страниц
+    story.append(PageBreak())
+    
+    # ========== ТАБЛИЦА СОДЕРЖАНИЯ ==========
+    story.append(Paragraph("TABLE OF CONTENTS", title_style))
+    story.append(Spacer(1, 0.5*cm))
+    
+    # Создаем оглавление
+    toc_items = [
+        "1. Topic Distribution Summary",
+        "2. Detailed Topic Analysis",
+        "3. Papers by Topic"
+    ]
+    
+    for item in toc_items:
+        story.append(Paragraph(f"• {item}", details_style))
     
     story.append(PageBreak())
     
-    # ========== СТАТИСТИКА ==========
-    
-    story.append(Paragraph("EXECUTIVE SUMMARY", title_style))
+    # ========== РАСПРЕДЕЛЕНИЕ ПО ТЕМАМ ==========
+    story.append(Paragraph("1. TOPIC DISTRIBUTION SUMMARY", title_style))
     story.append(Spacer(1, 0.5*cm))
     
-    # Собираем статистику
-    total_level1 = st.session_state.get('level1_count', 0)
-    total_level2 = st.session_state.get('level2_count', 0)
-    total_papers_found = sum(len(works) for works in works_by_topic.values())
-    topics_with_results = sum(1 for v in works_by_topic.values() if v)
+    # Таблица с распределением
+    table_data = [["Topic", "Number of Papers", "Percentage"]]
+    total = sum(topic_counts.values())
     
-    # Создаем таблицу статистики
-    stats_data = [
-        ["Metric", "Value"],
-        ["Level 1 Papers", f"{total_level1:,}"],
-        ["After Level 2 Filter", f"{total_level2:,}"],
-        ["Top Papers Found", f"{total_papers_found:,}"],
-        ["Topics with Results", f"{topics_with_results}"],
-        ["Total Sub-topics", f"{len(topic_counts)}"],
-        ["Year Range", f"{min(years)} - {max(years)}"]
-    ]
+    for topic, count in sorted(topic_counts.items(), key=lambda x: x[1], reverse=True):
+        if count > 0:
+            percentage = (count / total * 100) if total > 0 else 0
+            table_data.append([clean_text(topic), str(count), f"{percentage:.1f}%"])
     
-    stats_table = Table(stats_data, colWidths=[doc.width/2.5, doc.width/3])
-    stats_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3498DB')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 11),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-        ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#F8F9FA')),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#D5DBDB')),
-        ('FONTSIZE', (0, 1), (-1, -1), 10),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F2F4F4')]),
-    ]))
-    
-    story.append(stats_table)
-    story.append(Spacer(1, 1*cm))
-    
-    # Распределение по подтемам
-    story.append(Paragraph("Topic Distribution", subtitle_style))
-    story.append(Spacer(1, 0.3*cm))
-    
-    topic_data = [["Topic", "Papers", "Percentage"]] + [
-        [t, f"{c:,}", f"{(c/total_level2*100):.1f}%" if total_level2 > 0 else "0%"]
-        for t, c in sorted(topic_counts.items(), key=lambda x: x[1], reverse=True) if c > 0
-    ]
-    
-    if len(topic_data) > 1:
-        topic_table = Table(topic_data, colWidths=[doc.width/2, doc.width/5, doc.width/5])
+    if len(table_data) > 1:
+        topic_table = Table(table_data, colWidths=[doc.width*0.5, doc.width*0.2, doc.width*0.2])
         topic_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2ECC71')),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#667eea')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('FONTSIZE', (0, 0), (-1, 0), 11),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#F8F9FA')),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#D5DBDB')),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F2F4F4')]),
+            ('FONTSIZE', (0, 1), (-1, -1), 10),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F2F4F4')]),
         ]))
         story.append(topic_table)
     
     story.append(PageBreak())
     
-    # ========== ДЕТАЛЬНЫЙ ОТЧЕТ ПО ПОДТЕМАМ ==========
-    
-    story.append(Paragraph("DETAILED ANALYSIS BY SUB-TOPIC", title_style))
+    # ========== ДЕТАЛЬНЫЙ АНАЛИЗ ПО ТЕМАМ ==========
+    story.append(Paragraph("2. DETAILED TOPIC ANALYSIS", title_style))
     story.append(Spacer(1, 0.5*cm))
     
-    # Обрабатываем каждую подтему
-    for topic, works in works_by_topic.items():
-        if not works:
-            continue
-        
-        total_for_topic = topic_counts.get(topic, 0)
-        
-        # Заголовок темы
-        story.append(Paragraph(f"Topic: {clean_text_for_pdf(topic)}", topic_header_style))
-        story.append(Paragraph(f"Total papers: {total_for_topic:,} | Showing top {len(works)} most relevant", 
-                             meta_style))
-        story.append(Spacer(1, 0.2*cm))
-        
-        # Показываем первые 10 статей по каждой теме
-        for i, work in enumerate(works[:10], 1):
-            # Заголовок статьи
-            title = clean_text_for_pdf(work.get('title', 'No title available'))
-            story.append(Paragraph(f"{i}. {title}", paper_title_style))
+    for topic, count in sorted(topic_counts.items(), key=lambda x: x[1], reverse=True):
+        if count > 0 and topic in data and data[topic]:
+            story.append(Paragraph(f"Topic: {clean_text(topic)}", subtitle_style))
+            story.append(Paragraph(f"Total papers: {count:,}", meta_style))
+            story.append(Paragraph(f"Top papers analyzed: {len(data[topic])}", meta_style))
             
-            # Авторы
-            authors = work.get('authors', [])
-            if authors:
-                authors_text = ', '.join(authors[:3])
-                if len(authors) > 3:
-                    authors_text += f' et al. ({len(authors)} authors)'
-                story.append(Paragraph(f"<b>Authors:</b> {clean_text_for_pdf(authors_text)}", authors_style))
+            # Статистика по цитированиям для этой темы
+            citations = [w.get('cited_by_count', 0) for w in data[topic]]
+            if citations:
+                avg_cit = np.mean(citations)
+                median_cit = np.median(citations)
+                story.append(Paragraph(f"Average citations: {avg_cit:.1f}", details_style))
+                story.append(Paragraph(f"Median citations: {median_cit:.1f}", details_style))
             
-            # Основные метрики
-            citations = work.get('cited_by_count', 0)
-            year = work.get('publication_year', 'N/A')
-            relevance = work.get('relevance_score', 0)
-            journal = clean_text_for_pdf(work.get('journal', 'N/A')[:40])
+            story.append(Spacer(1, 0.3*cm))
             
-            metrics_text = f"""
-            <b>Citations:</b> {citations} | 
-            <b>Year:</b> {year} | 
-            <b>Relevance Score:</b> {relevance:.2f} | 
-            <b>Journal:</b> {journal} | 
-            <b>Open Access:</b> {'Yes' if work.get('is_oa') else 'No'}
-            """
-            story.append(Paragraph(metrics_text, metrics_style))
+            # Разделитель между темами
+            story.append(Paragraph("─" * 50, separator_style))
+    
+    story.append(PageBreak())
+    
+    # ========== СТАТЬИ ПО ТЕМАМ ==========
+    story.append(Paragraph("3. PAPERS BY TOPIC", title_style))
+    story.append(Spacer(1, 0.5*cm))
+    
+    for topic, works in data.items():
+        if works:
+            story.append(Paragraph(f"Topic: {clean_text(topic)}", subtitle_style))
+            story.append(Spacer(1, 0.2*cm))
             
-            # DOI и ссылка
-            doi = work.get('doi', '')
-            doi_url = work.get('doi_url', '')
-            
-            if doi:
+            for i, work in enumerate(works[:20], 1):  # Ограничиваем 20 статьями на тему
+                # Заголовок статьи
+                title = clean_text(work.get('title', 'No title available'))
+                story.append(Paragraph(f"{i}. {title}", paper_title_style))
+                
+                # Авторы
+                authors = work.get('authors', [])
+                if authors:
+                    authors_text = ', '.join(authors[:3])
+                    if len(authors) > 3:
+                        authors_text += f' et al. ({len(authors)} authors)'
+                    story.append(Paragraph(f"<b>Authors:</b> {clean_text(authors_text)}", authors_style))
+                
+                # Основные метрики
+                citations = work.get('cited_by_count', 0)
+                year = work.get('publication_year', 'N/A')
+                relevance = work.get('relevance_score', 0)
+                journal = clean_text(work.get('journal', 'N/A')[:40])
+                
+                metrics_text = f"""
+                <b>Citations:</b> {citations} | 
+                <b>Year:</b> {year} | 
+                <b>Relevance Score:</b> {relevance:.2f} | 
+                <b>Journal:</b> {journal} | 
+                <b>Open Access:</b> {'Yes' if work.get('is_oa') else 'No'}
+                """
+                story.append(Paragraph(metrics_text, metrics_style))
+                
+                # DOI и ссылка
+                doi_url = work.get('doi_url', '')
                 if doi_url:
-                    story.append(Paragraph(f"<b>DOI:</b> {clean_text_for_pdf(doi)}", details_style))
                     story.append(Paragraph(f"<b>Link:</b> {doi_url}", link_style))
-                else:
-                    story.append(Paragraph(f"<b>DOI:</b> {clean_text_for_pdf(doi)}", details_style))
+                
+                # Разделитель между статьями
+                if i < min(20, len(works)):
+                    story.append(Spacer(1, 0.2*cm))
+                    story.append(Paragraph("─" * 30, separator_style))
+                    story.append(Spacer(1, 0.2*cm))
             
-            # Разделитель между статьями
-            if i < min(10, len(works)):
-                story.append(Spacer(1, 0.2*cm))
-                story.append(Paragraph("─" * 40, separator_style))
-                story.append(Spacer(1, 0.2*cm))
-        
-        # Разделитель между темами
-        story.append(Spacer(1, 0.5*cm))
-        story.append(Paragraph("=" * 60, separator_style))
-        story.append(Spacer(1, 0.5*cm))
-        
-        # Добавляем разрыв страницы если нужно
-        if list(works_by_topic.keys())[-1] != topic:
-            story.append(PageBreak())
+            # Разделитель между темами
+            story.append(Spacer(1, 0.5*cm))
+            story.append(Paragraph("=" * 50, separator_style))
+            story.append(Spacer(1, 0.5*cm))
     
     # ========== ЗАКЛЮЧЕНИЕ ==========
-    
     story.append(PageBreak())
     story.append(Paragraph("CONCLUSION", title_style))
     story.append(Spacer(1, 0.5*cm))
     
-    # Анализ распределения
-    dominant_topic = max(topic_counts.items(), key=lambda x: x[1]) if topic_counts else (None, 0)
-    if dominant_topic[0]:
-        story.append(Paragraph(
-            f"The dominant sub-topic is <b>{clean_text_for_pdf(dominant_topic[0])}</b> with {dominant_topic[1]:,} papers "
-            f"({(dominant_topic[1]/total_level2*100):.1f}% of the filtered results).",
-            ParagraphStyle('Conclusion', parent=styles['Normal'], fontSize=10, spaceAfter=6)
-        ))
-    
-    # Рекомендации
-    story.append(Spacer(1, 0.3*cm))
-    story.append(Paragraph("<b>Recommendations for further research:</b>", 
-                          ParagraphStyle('RecHeader', parent=styles['Normal'], fontSize=11, spaceAfter=4)))
-    
-    recommendations = [
-        "• Explore the dominant sub-topics for comprehensive literature review",
-        "• Investigate emerging topics with recent publication spikes",
-        "• Consider cross-disciplinary connections between sub-topics",
-        "• Analyze highly-cited papers for foundational knowledge",
-        "• Review recent Open Access papers for cutting-edge research"
+    # Рекомендации на основе анализа
+    conclusions = [
+        f"This report analyzed {sum(len(works) for works in data.values())} top papers across {len([t for t, c in topic_counts.items() if c > 0])} sub-topics.",
+        f"The most productive sub-topic is: {max(topic_counts.items(), key=lambda x: x[1])[0] if topic_counts else 'N/A'}",
+        "Consider exploring papers with high relevance scores for literature reviews.",
+        "Papers with low citation counts may represent emerging research directions."
     ]
     
-    for rec in recommendations:
-        story.append(Paragraph(rec, details_style))
+    for conclusion in conclusions:
+        story.append(Paragraph(f"• {clean_text(conclusion)}", details_style))
     
-    # Нижний колонтитул
+    story.append(Spacer(1, 1*cm))
+    
+    # Заключительные замечания
+    story.append(Paragraph("FINAL NOTES", subtitle_style))
+    final_notes = [
+        "This report was generated automatically by Publication Clustering.",
+        "All data is sourced from OpenAlex API and is subject to their terms of use.",
+        "For the most current data, please visit the original sources via the provided DOIs.",
+        "Citation counts are as of the report generation date and may change over time."
+    ]
+    
+    for note in final_notes:
+        story.append(Paragraph(f"• {clean_text(note)}", details_style))
+    
+    # Нижний колонтитул на последней странице
     story.append(Spacer(1, 2*cm))
-    story.append(Paragraph("© Publication Clustering - Generated by Publication Clustering Tool", footer_style))
+    story.append(Paragraph("© Publication Clustering", footer_style))
     story.append(Paragraph(f"Report ID: {hashlib.md5(str(datetime.now()).encode()).hexdigest()[:8]}", 
-                         ParagraphStyle('ReportID', parent=styles['Normal'], fontSize=7,
-                                      textColor=colors.HexColor('#BDC3C7'), alignment=TA_CENTER)))
+                         ParagraphStyle(
+                             'ReportID',
+                             parent=styles['Normal'],
+                             fontSize=7,
+                             textColor=colors.HexColor('#BDC3C7'),
+                             alignment=TA_CENTER
+                         )))
     
     # ========== ГЕНЕРАЦИЯ PDF ==========
     
@@ -1686,6 +1785,8 @@ def main():
         st.session_state['level1_count'] = 0
     if 'level2_count' not in st.session_state:
         st.session_state['level2_count'] = 0
+    
+    # Загружаем сохраненные значения или устанавливаем значения по умолчанию
     if 'level1_input' not in st.session_state:
         st.session_state['level1_input'] = ''
     if 'level2_input' not in st.session_state:
@@ -1724,8 +1825,8 @@ def main():
             <strong>💡 Search Syntax Tips:</strong><br>
             • Use <b>OR</b> for logical OR (e.g., "MOF OR COF")<br>
             • Use quotes for exact phrases (e.g., "metal-organic frameworks")<br>
-            • Use <b>*</b> for wildcard search (e.g., "electroly*" matches electrolyte, electrolysis, electrolyzer)<br>
-            • Multiple words without operators are treated as exact phrase
+            • Use <b>*</b> for wildcard (e.g., "electroly*" matches electrolyte, electrolysis, electrolyzer)<br>
+            • Multiple words without OR are treated as a phrase automatically
         </div>
         """, unsafe_allow_html=True)
         
@@ -1735,7 +1836,7 @@ def main():
             st.markdown("**Level 1 (required):**")
             level1 = st.text_input(
                 "Main domain (broad research area)",
-                value=st.session_state['level1_input'] or '"metal-organic frameworks" OR MOF',
+                value=st.session_state['level1_input'] if st.session_state['level1_input'] else '"metal-organic frameworks" OR MOF',
                 key="level1",
                 label_visibility="collapsed",
                 placeholder="e.g., \"machine learning\" OR \"artificial intelligence\""
@@ -1744,7 +1845,7 @@ def main():
             st.markdown("**Level 2 (optional):**")
             level2 = st.text_input(
                 "Refinement term (narrows down Level 1)",
-                value=st.session_state['level2_input'] or "",
+                value=st.session_state['level2_input'] if st.session_state['level2_input'] else "",
                 key="level2",
                 label_visibility="collapsed",
                 placeholder="e.g., \"neural networks\" OR deep learning"
@@ -1752,10 +1853,10 @@ def main():
         
         with col2:
             st.markdown("**Level 3 terms (one per line - these will become your clusters):**")
-            level3_default = "\n".join(st.session_state['level3_input']) if st.session_state['level3_input'] else "MIL\nZIF\nIRMOF\nUiO\nHKUST"
+            default_level3 = '\n'.join(st.session_state['level3_input']) if st.session_state['level3_input'] else "MIL\nZIF\nIRMOF\nUiO\nHKUST"
             level3_text = st.text_area(
                 "Sub-topics for classification",
-                value=level3_default,
+                value=default_level3,
                 height=120,
                 key="level3",
                 label_visibility="collapsed",
@@ -1768,43 +1869,32 @@ def main():
         
         current_year = datetime.now().year
         
-        # Опции для выбора типа фильтра годов
+        # Опции годов с Range по умолчанию на первом месте
         year_option = st.radio(
             "Year filter type",
             ["Range", "Single year", "Multiple years"],
             horizontal=True,
             key="year_type",
-            index=0  # Range по умолчанию первый
+            index=0  # Range по умолчанию
         )
         
         if year_option == "Range":
-            default_range = st.session_state['years_input'] if st.session_state['years_input'] else [2000, current_year]
-            if isinstance(default_range, list) and len(default_range) > 1:
-                default_min, default_max = min(default_range), max(default_range)
-            else:
-                default_min, default_max = 2000, current_year
-            
-            year_range = st.slider(
-                "Select range", 
-                2000, current_year, 
-                (default_min, default_max)
-            )
+            # Полный диапазон от 2000 до 2026
+            default_range = (2000, 2026)
+            year_range = st.slider("Select range", 2000, 2026, default_range)
             years = list(range(year_range[0], year_range[1] + 1))
         elif year_option == "Single year":
-            default_year = st.session_state['years_input'][0] if st.session_state['years_input'] else current_year
-            year = st.slider("Select year", 2000, current_year, default_year)
-            years = [year]
+            years = [st.slider("Select year", 2000, current_year, current_year)]
         else:  # Multiple years
-            default_years = st.session_state['years_input'] if st.session_state['years_input'] else [current_year-2, current_year-1, current_year]
             years = st.multiselect(
                 "Select years",
-                list(range(current_year, 1999, -1)),
-                default=default_years
+                list(range(current_year, 2000, -1)),
+                default=[current_year-2, current_year-1, current_year]
             )
         
         # Тестовая кнопка для проверки запроса
         with st.expander("🔧 Test Query Before Full Analysis"):
-            if st.button("Test Current Query", use_container_width=True):
+            if st.button("Test Current Query", key="test_query"):
                 with st.spinner("Testing query..."):
                     temp_count = get_total_count(level1.strip(), level2.strip() or None, years)
                     if temp_count > 0:
@@ -1816,7 +1906,7 @@ def main():
                         - Checking your spelling
                         - Expanding the year range
                         - Using quotes for exact phrases
-                        - Using wildcard (*) for word variations
+                        - Using wildcards (*) for word variations
                         """)
         
         # Кнопка запуска
@@ -1828,7 +1918,7 @@ def main():
                 elif not level3_text.strip():
                     st.error("❌ Please enter at least one Level 3 term")
                 else:
-                    # Сохраняем в сессию через словарь
+                    # Сохраняем в сессию
                     st.session_state['level1_input'] = level1.strip()
                     st.session_state['level2_input'] = level2.strip() or None
                     st.session_state['level3_input'] = [t.strip() for t in level3_text.split('\n') if t.strip()]
@@ -1859,7 +1949,7 @@ def main():
         </div>
         """, unsafe_allow_html=True)
         
-        # Кнопка возврата
+        # Кнопка возврата на Step 1
         col1, col2 = st.columns([1, 3])
         with col1:
             if st.button("← Back to Step 1", key="back_from_step2"):
@@ -1900,8 +1990,30 @@ def main():
                 lambda p, m: update_progress(0.3 + p*0.2, m)
             )
             
-            # Шаг 4: Fetch top works for each level 3 term
-            update_progress(0.5, "Fetching top papers...")
+            # Шаг 4: Fetch yearly distribution data for each level 3 term
+            update_progress(0.5, "Fetching yearly distribution data...")
+            st.session_state['yearly_data'] = {}
+            
+            for i, term in enumerate(st.session_state['level3_input']):
+                if st.session_state['topic_counts'][term] == 0:
+                    st.session_state['yearly_data'][term] = {}
+                    continue
+                
+                update_progress(
+                    0.5 + (i / len(st.session_state['level3_input'])) * 0.2,
+                    f"Fetching yearly data for: {term}"
+                )
+                
+                yearly_data = fetch_yearly_distribution(
+                    st.session_state['level1_input'],
+                    st.session_state['level2_input'],
+                    term,
+                    st.session_state['years_input']
+                )
+                st.session_state['yearly_data'][term] = yearly_data
+            
+            # Шаг 5: Fetch top works for each level 3 term
+            update_progress(0.7, "Fetching top papers...")
             st.session_state['results'] = {}
             
             for i, term in enumerate(st.session_state['level3_input']):
@@ -1910,7 +2022,7 @@ def main():
                     continue
                 
                 update_progress(
-                    0.5 + (i / len(st.session_state['level3_input'])) * 0.4,
+                    0.7 + (i / len(st.session_state['level3_input'])) * 0.3,
                     f"Fetching papers for: {term}"
                 )
                 
@@ -1948,8 +2060,23 @@ def main():
         </div>
         """, unsafe_allow_html=True)
         
-        # Навигационные кнопки - back to step 1
-        navigation_buttons(show_back=True, show_new=True, back_to_step1=True)
+        # Навигационные кнопки
+        nav_col1, nav_col2, nav_col3 = st.columns([1, 1, 2])
+        
+        with nav_col1:
+            if st.button("← Back to Step 1", key="back_from_step3"):
+                st.session_state.step = 1
+                st.rerun()
+        
+        with nav_col2:
+            if st.button("🔄 New Search", key="new_from_step3"):
+                # Очищаем сессию
+                for key in ['step', 'results', 'topic_counts', 'level1_count', 'level2_count',
+                           'level1_input', 'level2_input', 'level3_input', 'years_input', 'yearly_data']:
+                    if key in st.session_state:
+                        del st.session_state[key]
+                st.session_state.step = 1
+                st.rerun()
         
         # Статистика
         col1, col2, col3, col4 = st.columns(4)
@@ -1982,7 +2109,7 @@ def main():
         """, unsafe_allow_html=True)
         
         # Вкладки для разных представлений
-        tab1, tab2, tab3, tab4 = st.tabs(["📈 Topic Distribution", "🌳 Tree Diagram", "📋 Papers by Topic", "📥 Export"])
+        tab1, tab2, tab3, tab4 = st.tabs(["📈 Topic Distribution", "🌳 Cluster Graph", "📋 Papers by Topic", "📥 Export"])
         
         with tab1:
             # График сравнения подтем
@@ -2000,35 +2127,14 @@ def main():
                     plt.close(fig)
                 st.markdown('</div>', unsafe_allow_html=True)
             
-            # Получаем реальные данные по годам для каждой подтемы
-            topic_yearly_data = {}
-            progress_bar = st.progress(0)
-            status_text = st.empty()
-            
-            for idx, term in enumerate(st.session_state.topic_counts.keys()):
-                if st.session_state.topic_counts[term] > 0:
-                    status_text.text(f"Fetching yearly distribution for: {term}")
-                    progress_bar.progress((idx + 1) / len(st.session_state.topic_counts))
-                    
-                    yearly_data = get_yearly_distribution(
-                        st.session_state.level1_input,
-                        st.session_state.level2_input,
-                        term,
-                        st.session_state.years_input
-                    )
-                    topic_yearly_data[term] = yearly_data
-                    time.sleep(0.2)  # Небольшая задержка между запросами
-            
-            progress_bar.empty()
-            status_text.empty()
-            
-            # Комбинированный график годовых распределений на основе РЕАЛЬНЫХ данных
-            if topic_yearly_data:
+            # Комбинированный график годовых распределений с реальными данными
+            if hasattr(st.session_state, 'yearly_data') and st.session_state.yearly_data:
                 st.markdown('<div class="scientific-plot">', unsafe_allow_html=True)
                 st.markdown("<h4>Comparative Yearly Distribution Analysis</h4>", unsafe_allow_html=True)
                 
                 fig_combined = create_combined_yearly_charts(
-                    topic_yearly_data,
+                    st.session_state.yearly_data,
+                    st.session_state.years_input,
                     st.session_state.level2_input
                 )
                 if fig_combined:
@@ -2040,30 +2146,32 @@ def main():
                     <strong>📌 Interpretation:</strong><br>
                     • <b>Stacked chart</b> shows absolute contributions over time<br>
                     • <b>Normalized chart</b> reveals relative trends (each topic normalized to its maximum)<br>
-                    • <b>Log scale</b> shows absolute values on logarithmic scale, enabling comparison of vastly different scales
+                    • <b>Log scale</b> shows absolute values on logarithmic scale - 10,000 papers appear as 10⁴, enabling comparison of vastly different scales
                 </div>
                 """, unsafe_allow_html=True)
                 st.markdown('</div>', unsafe_allow_html=True)
             
-            # Графики для каждой подтемы с РЕАЛЬНЫМИ данными
+            # Графики для каждой подтемы с реальными данными по годам
             for term in st.session_state.topic_counts.keys():
                 total_count = st.session_state.topic_counts.get(term, 0)
                 top_works = st.session_state.results.get(term, [])
                 
-                if total_count > 0 and term in topic_yearly_data:
+                if total_count > 0:
                     st.markdown(f'<div class="scientific-plot">', unsafe_allow_html=True)
-                    st.markdown(f"<h4>Analysis for: {term} (showing distribution of total {total_count} papers)</h4>", unsafe_allow_html=True)
+                    st.markdown(f"<h4>Analysis for: {term} (distribution of all {total_count} papers)</h4>", unsafe_allow_html=True)
                     
                     col1, col2 = st.columns(2)
                     
                     with col1:
-                        fig1 = create_yearly_distribution_chart(
-                            topic_yearly_data[term], 
-                            f"{term}: Publications by Year (all papers)"
-                        )
-                        if fig1:
-                            st.pyplot(fig1)
-                            plt.close(fig1)
+                        # Используем реальные данные по годам из yearly_data
+                        if hasattr(st.session_state, 'yearly_data') and term in st.session_state.yearly_data:
+                            fig1 = create_yearly_distribution_chart(
+                                st.session_state.yearly_data[term], 
+                                f"{term}: Publications by Year (all papers)"
+                            )
+                            if fig1:
+                                st.pyplot(fig1)
+                                plt.close(fig1)
                     
                     with col2:
                         if top_works:
@@ -2081,13 +2189,11 @@ def main():
                     st.markdown('</div>', unsafe_allow_html=True)
         
         with tab2:
-            # Улучшенная древовидная диаграмма (только Tree Diagram)
+            # Улучшенная древовидная визуализация
             st.markdown('<div class="scientific-plot">', unsafe_allow_html=True)
-            st.markdown("<h4>Hierarchical Tree Diagram</h4>", unsafe_allow_html=True)
+            st.markdown("<h4>Topic Relationship Tree</h4>", unsafe_allow_html=True)
             
             if any(count > 0 for count in st.session_state.topic_counts.values()):
-                st.markdown("**Scientific Tree Visualization** - Hierarchical structure with branch thickness proportional to publication count")
-                
                 fig_tree = create_tree_visualization(
                     st.session_state.topic_counts,
                     st.session_state.level1_input,
@@ -2100,11 +2206,11 @@ def main():
                 st.markdown("""
                 <div class="info-message">
                     <strong>🌳 Tree Diagram Interpretation:</strong><br>
-                    • <b>Trunk</b> represents the main research area (Level 1 + Level 2)<br>
-                    • <b>Branch thickness</b> is proportional to publications in each sub-topic<br>
-                    • <b>Leaf/fruit size</b> shows relative contribution<br>
-                    • <b>Branch curvature</b> adds natural, organic feel to the visualization<br>
-                    • This diagram visualizes the hierarchical relationship between main topic and sub-fields
+                    • Trunk thickness represents the overall field size<br>
+                    • Branch thickness is proportional to publications in each sub-topic<br>
+                    • Node size and marker style show relative contribution<br>
+                    • Numbers (n) indicate exact publication counts<br>
+                    • Visualizes the hierarchical relationship between main topic and sub-fields in a scientific style
                 </div>
                 """, unsafe_allow_html=True)
             else:
@@ -2153,11 +2259,12 @@ def main():
             
             with col3:
                 # PDF экспорт
-                pdf_data = export_to_pdf(
+                pdf_data = generate_pdf(
                     st.session_state.results,
                     st.session_state.topic_counts,
                     st.session_state.level1_input,
                     st.session_state.level2_input,
+                    st.session_state.level3_input,
                     st.session_state.years_input
                 )
                 st.download_button(
@@ -2178,4 +2285,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
