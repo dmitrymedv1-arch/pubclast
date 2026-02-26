@@ -885,6 +885,62 @@ def enrich_work_data(work: Dict) -> Dict:
     
     return enriched
 
+def get_yearly_distribution(level1_term: str, level2_term: Optional[str], 
+                           level3_term: str, years: List[int]) -> Dict[int, int]:
+    """
+    Получает реальное распределение публикаций по годам для конкретной подтемы
+    """
+    base_filters = build_search_filter(level1_term, level2_term)
+    filter_str = build_level3_filter(level3_term, base_filters)
+    
+    yearly_counts = {}
+    
+    # Создаем прогресс-бар в консоли для отслеживания
+    logger.info(f"Fetching yearly distribution for: {level3_term}")
+    
+    for year in years:
+        # Добавляем фильтр по конкретному году
+        year_filter = f"{filter_str},publication_year:{year}"
+        
+        params = {
+            'filter': year_filter,
+            'per-page': 1
+        }
+        
+        data = make_openalex_request(f"{OPENALEX_BASE_URL}/works", params)
+        
+        if data and 'meta' in data:
+            yearly_counts[year] = data['meta'].get('count', 0)
+        else:
+            yearly_counts[year] = 0
+        
+        # Небольшая задержка между запросами
+        time.sleep(0.1)
+    
+    return yearly_counts
+
+def get_all_yearly_distributions(level1_term: str, level2_term: Optional[str],
+                                level3_terms: List[str], years: List[int],
+                                progress_callback=None) -> Dict[str, Dict[int, int]]:
+    """
+    Получает годовые распределения для всех подтем одновременно
+    """
+    all_distributions = {}
+    total_terms = len(level3_terms)
+    
+    for idx, term in enumerate(level3_terms):
+        if progress_callback:
+            progress_callback(
+                idx / total_terms,
+                f"Fetching yearly distribution for: {term}"
+            )
+        
+        all_distributions[term] = get_yearly_distribution(
+            level1_term, level2_term, term, years
+        )
+    
+    return all_distributions
+
 # ============================================================================
 # ФУНКЦИИ ДЛЯ ВИЗУАЛИЗАЦИИ (НАУЧНЫЙ СТИЛЬ)
 # ============================================================================
@@ -949,8 +1005,10 @@ def create_scientific_bar_chart(data: Dict[str, int], level2_count: int, title: 
     
     return fig
 
-def create_yearly_distribution_chart(works_or_counts, title: str, is_counts_data: bool = False):
-    """Создает график распределения по годам"""
+def create_yearly_distribution_chart(yearly_data: Dict[int, int], title: str):
+    """
+    Создает график распределения по годам на основе переданных данных
+    """
     fig, ax = plt.subplots(figsize=(10, 5))
     
     # Применяем научный стиль
@@ -960,21 +1018,9 @@ def create_yearly_distribution_chart(works_or_counts, title: str, is_counts_data
     ax.spines['left'].set_linewidth(1.0)
     ax.tick_params(axis='both', which='major', labelsize=9)
     
-    if is_counts_data:
-        # Если переданы данные из topic_counts (словарь с годами)
-        year_counts = works_or_counts
-        # Убеждаемся, что ключи - целые числа
-        years_sorted = sorted([int(y) for y in year_counts.keys()])
-        counts = [int(year_counts[y]) for y in years_sorted]
-    else:
-        # Если переданы работы
-        years = [int(w.get('publication_year')) for w in works_or_counts if w.get('publication_year')]
-        if not years:
-            return None
-        
-        year_counts = Counter(years)
-        years_sorted = sorted(year_counts.keys())
-        counts = [year_counts[y] for y in years_sorted]
+    # Убеждаемся, что ключи - целые числа и сортируем
+    years_sorted = sorted([int(y) for y in yearly_data.keys()])
+    counts = [yearly_data[y] for y in years_sorted]
     
     # Создаем столбчатую диаграмму с правильными годами
     bars = ax.bar(years_sorted, counts, color='gray', edgecolor='black', linewidth=0.5, width=0.8)
@@ -1042,12 +1088,13 @@ def create_citation_distribution_chart(works_or_counts, title: str, is_counts_da
     plt.tight_layout()
     return fig
 
-def create_combined_yearly_charts(topic_counts: Dict[str, int], years_input: List[int], level2_term: Optional[str] = None):
+def create_combined_yearly_charts(topic_counts: Dict[str, int], 
+                                 yearly_distributions: Dict[str, Dict[int, int]],
+                                 years_input: List[int], 
+                                 level2_term: Optional[str] = None):
     """
-    Создает комбинированный график с годовыми распределениями для всех подтем:
-    - Со смещением (stacked)
-    - Нормализованный (по максимальному значению)
-    - Логарифмическая шкала (абсолютные значения)
+    Создает комбинированный график с годовыми распределениями для всех подтем
+    Использует РЕАЛЬНЫЕ данные из API
     """
     # Создаем фигуру с тремя подграфиками
     fig, axes = plt.subplots(1, 3, figsize=(18, 6))
@@ -1068,40 +1115,6 @@ def create_combined_yearly_charts(topic_counts: Dict[str, int], years_input: Lis
         plt.close(fig)
         return None
     
-    # Для каждой темы получаем данные по годам
-    # В реальном приложении здесь должны быть реальные данные из API
-    # Используем детерминированное распределение для согласованности между графиками
-    topic_yearly_data = {}
-    
-    # Создаем базовое распределение, которое будет одинаковым для всех вызовов
-    np.random.seed(42)  # Фиксируем seed для воспроизводимости
-    
-    for topic in topics:
-        total = topic_counts[topic]
-        
-        # Создаем реалистичное распределение: больше публикаций в последние годы
-        # Используем одинаковый паттерн для всех тем, но с разной амплитудой
-        years_array = np.array(years)
-        # Нормализуем годы от 0 до 1
-        years_norm = (years_array - years_array.min()) / (years_array.max() - years_array.min() + 1)
-        # Экспоненциальный рост к последним годам
-        base_weights = np.exp(3 * years_norm)  # экспоненциальный рост
-        # Добавляем небольшие вариации для разных тем (но детерминированные)
-        topic_seed = hash(topic) % 1000
-        np.random.seed(topic_seed)
-        variation = 1 + 0.2 * np.random.randn(len(years))
-        weights = base_weights * variation
-        weights = weights / weights.sum()  # нормализуем
-        
-        # Генерируем распределение
-        yearly_counts = np.random.multinomial(total, weights, size=1)[0]
-        
-        # Сохраняем как словарь с целыми годами в качестве ключей
-        topic_yearly_data[topic] = {year: int(count) for year, count in zip(years, yearly_counts)}
-    
-    # Восстанавливаем seed
-    np.random.seed(None)
-    
     # Подграфик 1: Со смещением (stacked)
     ax = axes[0]
     bottom = np.zeros(len(years))
@@ -1113,7 +1126,10 @@ def create_combined_yearly_charts(topic_counts: Dict[str, int], years_input: Lis
     yearly_totals = np.zeros(len(years))
     
     for idx, topic in enumerate(topics):
-        counts = [topic_yearly_data[topic].get(year, 0) for year in years]
+        # Получаем реальные данные из переданного словаря
+        topic_yearly = yearly_distributions.get(topic, {})
+        counts = [topic_yearly.get(year, 0) for year in years]
+        
         ax.bar(years, counts, bottom=bottom, label=topic, 
                color=gray_colors[idx], edgecolor='black', linewidth=0.5, width=0.8)
         bottom += counts
@@ -1138,7 +1154,8 @@ def create_combined_yearly_charts(topic_counts: Dict[str, int], years_input: Lis
     ax = axes[1]
     
     for idx, topic in enumerate(topics):
-        counts = np.array([topic_yearly_data[topic].get(year, 0) for year in years])
+        topic_yearly = yearly_distributions.get(topic, {})
+        counts = np.array([topic_yearly.get(year, 0) for year in years])
         if counts.max() > 0:
             normalized = counts / counts.max()
             ax.plot(years, normalized, marker='o', linewidth=1.5, markersize=4, 
@@ -1160,12 +1177,14 @@ def create_combined_yearly_charts(topic_counts: Dict[str, int], years_input: Lis
     # Находим глобальный максимум для настройки оси Y
     all_counts = []
     for topic in topics:
-        counts = [topic_yearly_data[topic].get(year, 0) for year in years]
+        topic_yearly = yearly_distributions.get(topic, {})
+        counts = [topic_yearly.get(year, 0) for year in years]
         all_counts.extend(counts)
     max_count = max(all_counts) if all_counts else 1
     
     for idx, topic in enumerate(topics):
-        counts = [topic_yearly_data[topic].get(year, 0) for year in years]
+        topic_yearly = yearly_distributions.get(topic, {})
+        counts = [topic_yearly.get(year, 0) for year in years]
         if max(counts) > 0:
             # Для log scale, значения 0 заменяем на 0.1 (ниже минимального)
             counts_log = [c if c > 0 else 0.1 for c in counts]
@@ -1984,6 +2003,36 @@ def main():
         </div>
         """, unsafe_allow_html=True)
         
+        # ========== НОВЫЙ КОД: ПОЛУЧЕНИЕ ГОДОВЫХ РАСПРЕДЕЛЕНИЙ ==========
+        # Проверяем, есть ли уже сохраненные годовые распределения
+        if 'yearly_distributions' not in st.session_state:
+            with st.spinner("Fetching yearly distribution data..."):
+                progress_bar_yearly = st.progress(0)
+                status_text_yearly = st.empty()
+                
+                def update_yearly_progress(value, message):
+                    progress_bar_yearly.progress(value)
+                    status_text_yearly.text(message)
+                
+                st.session_state['yearly_distributions'] = get_all_yearly_distributions(
+                    st.session_state['level1_input'],
+                    st.session_state['level2_input'],
+                    st.session_state['level3_input'],
+                    st.session_state['years_input'],
+                    update_yearly_progress
+                )
+                
+                progress_bar_yearly.empty()
+                status_text_yearly.empty()
+        
+        # Навигационные кнопки - изменено на Back to Step 1
+        nav_col1, nav_col2, nav_col3 = st.columns([1, 1, 2])
+        
+        with nav_col1:
+            if st.button("← Back to Step 1", key="back_from_step3"):
+                st.session_state.step = 1
+                st.rerun()
+        
         # Навигационные кнопки - изменено на Back to Step 1
         nav_col1, nav_col2, nav_col3 = st.columns([1, 1, 2])
         
@@ -2067,6 +2116,7 @@ def main():
                 
                 fig_combined = create_combined_yearly_charts(
                     st.session_state.topic_counts,
+                    st.session_state['yearly_distributions'],
                     st.session_state.years_input,
                     st.session_state.level2_input
                 )
@@ -2093,18 +2143,13 @@ def main():
                     st.markdown(f'<div class="scientific-plot">', unsafe_allow_html=True)
                     st.markdown(f"<h4>Analysis for: {term} (showing distribution of total {total_count} papers)</h4>", unsafe_allow_html=True)
                     
-                    # Создаем данные по годам (моделируем на основе общего количества)
-                    years = st.session_state.years_input
-                    # Моделируем распределение (более реалистичное: растет к последним годам)
-                    weights = np.array([(i+1) for i in range(len(years))])
-                    weights = weights / weights.sum()
-                    simulated_yearly = np.random.multinomial(total_count, weights, size=1)[0]
-                    yearly_data = dict(zip(years, simulated_yearly))
+                    # Получаем РЕАЛЬНЫЕ данные по годам
+                    yearly_data = st.session_state['yearly_distributions'].get(term, {})
                     
                     col1, col2 = st.columns(2)
                     
                     with col1:
-                        fig1 = create_yearly_distribution_chart(yearly_data, f"{term}: Publications by Year (all papers)", is_counts_data=True)
+                        fig1 = create_yearly_distribution_chart(yearly_data, f"{term}: Publications by Year (all papers)")
                         if fig1:
                             st.pyplot(fig1)
                             plt.close(fig1)
@@ -2223,4 +2268,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
