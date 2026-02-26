@@ -1919,7 +1919,7 @@ def main():
                         <div class="info-message">
                             <strong>Query Analysis:</strong><br>
                             • Parsed Level 1: {parse_query_terms(level1.strip())}<br>
-                            • Parsed Level 2: {parse_query_terms(level2.strip()) if level2.strip() else '(not specified)'}<br>
+                            • Parsed Level 2: {parse_query_terms(level2.strip()) if level2 and level2.strip() else '(not specified)'}<br>
                             • Years: {min(years)}-{max(years)}<br>
                             • Total papers: {temp_count:,}
                         </div>
@@ -1938,14 +1938,14 @@ def main():
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
             if st.button("🔍 Start Analysis", type="primary", use_container_width=True):
-                if not level1.strip():
+                if not level1 or not level1.strip():
                     st.error("❌ Please enter Level 1 term")
                 elif not level3_text.strip():
                     st.error("❌ Please enter at least one Level 3 term")
                 else:
                     # Save to session
                     st.session_state['level1_input'] = level1.strip()
-                    st.session_state['level2_input'] = level2.strip() or None
+                    st.session_state['level2_input'] = level2.strip() if level2 else None
                     st.session_state['level3_input'] = [t.strip() for t in level3_text.split('\n') if t.strip()]
                     st.session_state['years_input'] = years
                     st.session_state['step'] = 2
@@ -2298,5 +2298,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
