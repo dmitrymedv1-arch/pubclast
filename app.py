@@ -1542,7 +1542,17 @@ def generate_pdf_report(works_by_topic: Dict[str, List[Dict]], level1_term: str,
                 # DOI
                 doi = enriched.get('doi', '')
                 if doi:
-                    story.append(Paragraph(f"DOI: {doi}", details_style))
+                    # Формируем URL для DOI
+                    if doi.startswith('10.'):
+                        doi_url = f"https://doi.org/{doi}"
+                    elif doi.startswith('https://doi.org/'):
+                        doi_url = doi
+                    else:
+                        doi_url = f"https://doi.org/{doi}"
+                    
+                    # Создаем кликабельную ссылку
+                    doi_link = f'<link href="{doi_url}"><font color="blue"><u>{doi}</u></font></link>'
+                    story.append(Paragraph(f"DOI: {doi_link}", details_style))
                 
                 # Разделитель
                 story.append(Spacer(1, 0.2*cm))
@@ -2159,4 +2169,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
