@@ -27,7 +27,7 @@ warnings.filterwarnings('ignore')
 
 # PDF экспорт
 from reportlab.lib.pagesizes import A4
-from reportlab.lib import colors
+from reportlab.lib import colors as rl_colors
 from reportlab.lib.units import cm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, Image
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -1415,7 +1415,7 @@ def generate_pdf(data: Dict[str, List[Dict]], topic_counts: Dict[str, int],
         'CustomTitle',
         parent=styles['Heading1'],
         fontSize=18,
-        textColor=colors.HexColor('#2C3E50'),
+        textColor=rl_colors.HexColor('#2C3E50'),
         spaceAfter=12,
         alignment=TA_CENTER,
         fontName='Helvetica-Bold'
@@ -1426,7 +1426,7 @@ def generate_pdf(data: Dict[str, List[Dict]], topic_counts: Dict[str, int],
         'CustomSubtitle',
         parent=styles['Heading2'],
         fontSize=14,
-        textColor=colors.HexColor('#34495E'),
+        textColor=rl_colors.HexColor('#34495E'),
         spaceAfter=8,
         alignment=TA_CENTER,
         fontName='Helvetica'
@@ -1437,7 +1437,7 @@ def generate_pdf(data: Dict[str, List[Dict]], topic_counts: Dict[str, int],
         'CustomTopic',
         parent=styles['Heading3'],
         fontSize=12,
-        textColor=colors.HexColor('#16A085'),
+        textColor=rl_colors.HexColor('#16A085'),
         spaceAfter=6,
         alignment=TA_CENTER,
         fontName='Helvetica-Bold'
@@ -1448,7 +1448,7 @@ def generate_pdf(data: Dict[str, List[Dict]], topic_counts: Dict[str, int],
         'CustomMeta',
         parent=styles['Normal'],
         fontSize=10,
-        textColor=colors.HexColor('#7F8C8D'),
+        textColor=rl_colors.HexColor('#7F8C8D'),
         spaceAfter=3,
         alignment=TA_CENTER,
         fontName='Helvetica-Oblique'
@@ -1459,7 +1459,7 @@ def generate_pdf(data: Dict[str, List[Dict]], topic_counts: Dict[str, int],
         'CustomPaperTitle',
         parent=styles['Heading4'],
         fontSize=11,
-        textColor=colors.HexColor('#2980B9'),
+        textColor=rl_colors.HexColor('#2980B9'),
         spaceAfter=4,
         alignment=TA_LEFT,
         fontName='Helvetica-Bold'
@@ -1470,7 +1470,7 @@ def generate_pdf(data: Dict[str, List[Dict]], topic_counts: Dict[str, int],
         'CustomAuthors',
         parent=styles['Normal'],
         fontSize=9,
-        textColor=colors.HexColor('#2C3E50'),
+        textColor=rl_colors.HexColor('#2C3E50'),
         spaceAfter=2,
         alignment=TA_LEFT,
         fontName='Helvetica'
@@ -1526,7 +1526,7 @@ def generate_pdf(data: Dict[str, List[Dict]], topic_counts: Dict[str, int],
         'CustomLink',
         parent=styles['Normal'],
         fontSize=9,
-        textColor=colors.blue,
+        textColor=rl_colors.blue,
         spaceAfter=2,
         alignment=TA_LEFT,
         fontName='Helvetica',
@@ -1610,17 +1610,17 @@ def generate_pdf(data: Dict[str, List[Dict]], topic_counts: Dict[str, int],
     if len(table_data) > 1:
         topic_table = Table(table_data, colWidths=[doc.width*0.5, doc.width*0.2, doc.width*0.2])
         topic_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#667eea')),
+            ('BACKGROUND', (0, 0), (-1, 0), rl_colors.HexColor('#667eea')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
             ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
             ('FONTSIZE', (0, 0), (-1, 0), 11),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#F8F9FA')),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#D5DBDB')),
+            ('BACKGROUND', (0, 1), (-1, -1), rl_colors.HexColor('#F8F9FA')),
+            ('GRID', (0, 0), (-1, -1), 0.5, rl_colors.HexColor('#D5DBDB')),
             ('FONTSIZE', (0, 1), (-1, -1), 10),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F2F4F4')]),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [rl_colors.white, rl_colors.HexColor('#F2F4F4')]),
         ]))
         story.append(topic_table)
     
@@ -2285,3 +2285,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
