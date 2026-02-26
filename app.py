@@ -1651,7 +1651,7 @@ def generate_pdf_report(works_by_topic: Dict[str, List[Dict]], level1_term: str,
             story.append(Paragraph(f"Topic: {topic}", topic_style))
             story.append(Spacer(1, 0.3*cm))
             
-            for i, work in enumerate(works[:20], 1):  # Limit to 20 papers per topic
+            for i, work in enumerate(works[:100], 1):
                 enriched = enrich_work_data(work)
                 
                 # Title
@@ -2298,3 +2298,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
