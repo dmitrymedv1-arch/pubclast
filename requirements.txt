@@ -9,4 +9,5 @@ ratelimit
 pillow
 xlsxwriter
 openpyxl
+networkx
 
