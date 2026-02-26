@@ -1682,7 +1682,7 @@ def main():
                 fig = create_scientific_bar_chart(
                     st.session_state.topic_counts,
                     st.session_state.level2_count,
-                    f"Publications by Sub-topic ({', '.join(map(str, st.session_state.years_input[:3]))})"
+                    f"Publications by Sub-topic ({min(st.session_state.years_input)}-{max(st.session_state.years_input)})"
                 )
                 if fig:
                     st.pyplot(fig)
@@ -1899,6 +1899,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
