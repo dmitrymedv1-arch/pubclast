@@ -988,20 +988,19 @@ def create_combined_yearly_charts(topic_counts: Dict[str, int], years_input: Lis
     ax.legend(fontsize=8, frameon=True, edgecolor='black')
     ax.grid(True, alpha=0.3, linestyle='--')
     
-    # Подграфик 3: Логарифмическая шкала (нормализованный)
+    # Подграфик 3: Логарифмическая шкала (абсолютные значения)
     ax = axes[2]
     
     for topic in topics:
         counts = np.array([topic_yearly_data[topic].get(year, 0) for year in years])
         if counts.max() > 0:
-            normalized = counts / counts.max()
-            # Добавляем маленькое смещение для логарифма
-            normalized_log = np.where(normalized > 0, normalized, 1e-6)
-            ax.semilogy(years, normalized_log, marker='s', linewidth=1.5, markersize=4, label=topic)
+            # Используем абсолютные значения, добавляем 1 чтобы избежать log(0)
+            counts_log = np.where(counts > 0, counts, 1)
+            ax.semilogy(years, counts_log, marker='s', linewidth=1.5, markersize=4, label=topic)
     
     ax.set_xlabel('Publication Year', fontsize=10, fontweight='bold')
-    ax.set_ylabel('Normalized Intensity (log scale)', fontsize=10, fontweight='bold')
-    ax.set_title('C) Logarithmic Scale Comparison', fontsize=11, fontweight='bold', pad=10)
+    ax.set_ylabel('Number of Publications (log scale)', fontsize=10, fontweight='bold')
+    ax.set_title('C) Logarithmic Scale (absolute values)', fontsize=11, fontweight='bold', pad=10)
     ax.tick_params(axis='both', which='major', labelsize=9)
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
@@ -1695,10 +1694,9 @@ def main():
                     <strong>📌 Interpretation:</strong><br>
                     • <b>Stacked chart</b> shows absolute contributions over time<br>
                     • <b>Normalized chart</b> reveals relative trends (each topic normalized to its maximum)<br>
-                    • <b>Log scale</b> helps compare growth patterns across vastly different scales
+                    • <b>Log scale</b> shows absolute values on logarithmic scale - 10,000 papers appear as 10⁴, enabling comparison of vastly different scales
                 </div>
                 """, unsafe_allow_html=True)
-                st.markdown('</div>', unsafe_allow_html=True)
             
             # Графики для каждой подтемы (теперь с полными данными, а не только топ-100)
             for term in st.session_state.topic_counts.keys():
@@ -1887,6 +1885,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
