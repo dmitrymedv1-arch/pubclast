@@ -1843,8 +1843,8 @@ def main():
                         st.markdown(f"""
                         <div class="info-message">
                             <strong>Query Analysis:</strong><br>
-                            • Parsed Level 1: {parse_query_terms(level1.strip())}<br>
-                            • Parsed Level 2: {parse_query_terms(level2.strip()) if level2.strip() else '(not specified)'}<br>
+                            • Parsed Level 1: {parse_query_terms(level1.strip()) if level1 and level1.strip() else ''}<br>
+                            • Parsed Level 2: {parse_query_terms(level2.strip()) if level2 and level2.strip() else '(not specified)'}<br>
                             • Years: {min(years)}-{max(years)}<br>
                             • Total papers: {temp_count:,}
                         </div>
@@ -2237,6 +2237,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
