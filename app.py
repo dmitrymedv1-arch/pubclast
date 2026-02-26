@@ -26,11 +26,11 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # ============================================================================
-# ИМПОРТЫ ДЛЯ PDF
+# ИМПОРТЫ ДЛЯ PDF - ИСПРАВЛЕНО
 # ============================================================================
 try:
     from reportlab.lib.pagesizes import A4
-    from reportlab.lib import colors
+    from reportlab.lib import colors as reportlab_colors  # Переименовано чтобы избежать конфликта
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import cm
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, Image
@@ -1275,7 +1275,7 @@ def export_to_excel(works_by_topic: Dict[str, List[Dict]]) -> bytes:
         workbook = writer.book
         header_format = workbook.add_format({
             'bold': True,
-            'bg_color': colors['primary'],
+            'bg_color': st.session_state['color_palette']['primary'],
             'font_color': 'white',
             'border': 1
         })
@@ -1320,12 +1320,13 @@ def generate_pdf_report(works_by_topic: Dict[str, List[Dict]], level1_term: str,
     styles = getSampleStyleSheet()
     
     # ========== СОЗДАНИЕ КАСТОМНЫХ СТИЛЕЙ ==========
+    # Используем reportlab_colors вместо colors
     
     title_style = ParagraphStyle(
         'CustomTitle',
         parent=styles['Heading1'],
         fontSize=18,
-        textColor=colors.HexColor('#2C3E50'),
+        textColor=reportlab_colors.HexColor('#2C3E50'),
         spaceAfter=12,
         alignment=TA_CENTER,
         fontName='Helvetica-Bold'
@@ -1335,7 +1336,7 @@ def generate_pdf_report(works_by_topic: Dict[str, List[Dict]], level1_term: str,
         'CustomSubtitle',
         parent=styles['Heading2'],
         fontSize=14,
-        textColor=colors.HexColor('#34495E'),
+        textColor=reportlab_colors.HexColor('#34495E'),
         spaceAfter=8,
         alignment=TA_CENTER,
         fontName='Helvetica'
@@ -1345,7 +1346,7 @@ def generate_pdf_report(works_by_topic: Dict[str, List[Dict]], level1_term: str,
         'CustomTopic',
         parent=styles['Heading3'],
         fontSize=12,
-        textColor=colors.HexColor('#16A085'),
+        textColor=reportlab_colors.HexColor('#16A085'),
         spaceAfter=6,
         alignment=TA_CENTER,
         fontName='Helvetica-Bold'
@@ -1355,7 +1356,7 @@ def generate_pdf_report(works_by_topic: Dict[str, List[Dict]], level1_term: str,
         'CustomMeta',
         parent=styles['Normal'],
         fontSize=10,
-        textColor=colors.HexColor('#7F8C8D'),
+        textColor=reportlab_colors.HexColor('#7F8C8D'),
         spaceAfter=3,
         alignment=TA_CENTER,
         fontName='Helvetica-Oblique'
@@ -1365,7 +1366,7 @@ def generate_pdf_report(works_by_topic: Dict[str, List[Dict]], level1_term: str,
         'CustomPaperTitle',
         parent=styles['Heading4'],
         fontSize=11,
-        textColor=colors.HexColor('#2980B9'),
+        textColor=reportlab_colors.HexColor('#2980B9'),
         spaceAfter=4,
         alignment=TA_LEFT,
         fontName='Helvetica-Bold'
@@ -1375,7 +1376,7 @@ def generate_pdf_report(works_by_topic: Dict[str, List[Dict]], level1_term: str,
         'CustomAuthors',
         parent=styles['Normal'],
         fontSize=9,
-        textColor=colors.HexColor('#2C3E50'),
+        textColor=reportlab_colors.HexColor('#2C3E50'),
         spaceAfter=2,
         alignment=TA_LEFT,
         fontName='Helvetica'
@@ -1385,7 +1386,7 @@ def generate_pdf_report(works_by_topic: Dict[str, List[Dict]], level1_term: str,
         'CustomDetails',
         parent=styles['Normal'],
         fontSize=8,
-        textColor=colors.HexColor('#7F8C8D'),
+        textColor=reportlab_colors.HexColor('#7F8C8D'),
         spaceAfter=2,
         alignment=TA_LEFT,
         fontName='Helvetica'
@@ -1395,7 +1396,7 @@ def generate_pdf_report(works_by_topic: Dict[str, List[Dict]], level1_term: str,
         'CustomMetrics',
         parent=styles['Normal'],
         fontSize=9,
-        textColor=colors.HexColor('#27AE60'),
+        textColor=reportlab_colors.HexColor('#27AE60'),
         spaceAfter=0,
         alignment=TA_LEFT,
         fontName='Helvetica-Bold'
@@ -1405,7 +1406,7 @@ def generate_pdf_report(works_by_topic: Dict[str, List[Dict]], level1_term: str,
         'CustomFooter',
         parent=styles['Normal'],
         fontSize=8,
-        textColor=colors.HexColor('#95A5A6'),
+        textColor=reportlab_colors.HexColor('#95A5A6'),
         spaceBefore=15,
         alignment=TA_CENTER,
         fontName='Helvetica-Oblique'
@@ -1415,7 +1416,7 @@ def generate_pdf_report(works_by_topic: Dict[str, List[Dict]], level1_term: str,
         'CustomSeparator',
         parent=styles['Normal'],
         fontSize=8,
-        textColor=colors.HexColor('#BDC3C7'),
+        textColor=reportlab_colors.HexColor('#BDC3C7'),
         spaceAfter=10,
         spaceBefore=10,
         alignment=TA_CENTER,
@@ -1495,14 +1496,14 @@ def generate_pdf_report(works_by_topic: Dict[str, List[Dict]], level1_term: str,
     if len(topic_data) > 1:
         topic_table = Table(topic_data, colWidths=[doc.width/2, doc.width/4, doc.width/4])
         topic_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2C3E50')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('BACKGROUND', (0, 0), (-1, 0), reportlab_colors.HexColor('#2C3E50')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), reportlab_colors.white),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
             ('FONTSIZE', (0, 0), (-1, 0), 11),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#F8F9FA')),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#D5DBDB')),
+            ('BACKGROUND', (0, 1), (-1, -1), reportlab_colors.HexColor('#F8F9FA')),
+            ('GRID', (0, 0), (-1, -1), 0.5, reportlab_colors.HexColor('#D5DBDB')),
             ('FONTSIZE', (0, 1), (-1, -1), 10),
         ]))
         story.append(topic_table)
@@ -1586,14 +1587,14 @@ def generate_pdf_report(works_by_topic: Dict[str, List[Dict]], level1_term: str,
         
         stats_table = Table(stats_data, colWidths=[doc.width/2, doc.width/3])
         stats_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#27AE60')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('BACKGROUND', (0, 0), (-1, 0), reportlab_colors.HexColor('#27AE60')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), reportlab_colors.white),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
             ('FONTSIZE', (0, 0), (-1, 0), 11),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#F8F9FA')),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#D5DBDB')),
+            ('BACKGROUND', (0, 1), (-1, -1), reportlab_colors.HexColor('#F8F9FA')),
+            ('GRID', (0, 0), (-1, -1), 0.5, reportlab_colors.HexColor('#D5DBDB')),
             ('FONTSIZE', (0, 1), (-1, -1), 10),
         ]))
         story.append(stats_table)
@@ -2158,3 +2159,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
