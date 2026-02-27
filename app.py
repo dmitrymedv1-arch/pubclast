@@ -3963,15 +3963,15 @@ def main():
                     st.button("📄 PDF Report", disabled=True, use_container_width=True)
     
     # Footer
-    st.markdown("---")
     st.markdown(f"""
     <div style="text-align: center; color: #888; font-size: 0.8rem; margin-top: 1rem;">
-        <p>© Publication Clustering | Theme: {colors['name']}</p>
+        <p>© Publication Clustering | Theme: {ui_colors['name']}</p>
     </div>
     """, unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
+
 
 
 
