@@ -2939,7 +2939,7 @@ def export_to_excel(works_by_topic: Dict[str, List[Dict]], highly_cited_papers: 
     return output.getvalue()
 
 def generate_pdf_report(works_by_topic: Dict[str, List[Dict]], level1_term: str, level2_term: Optional[str] = None, years: Optional[List[int]] = None, highly_cited_papers: List[Dict] = None) -> Optional[bytes]:
-    """Generate PDF report with analysis results including highly cited papers"""
+    """Generate PDF report with analysis results including highly cited papers and FWCI analysis"""
     if not PDF_AVAILABLE:
         return None
     
@@ -3107,7 +3107,7 @@ def generate_pdf_report(works_by_topic: Dict[str, List[Dict]], level1_term: str,
     toc_items = [
         "1. Topic Distribution Summary",
         "2. Highly Cited Papers (>85th percentile)",
-        "3. Top 100 Papers by Field-Weighted Citation Impact",
+        "3. Field-Weighted Citation Impact Analysis (Top 100)",
         "4. Detailed Paper Analysis by Topic"
     ]
     
@@ -3148,13 +3148,78 @@ def generate_pdf_report(works_by_topic: Dict[str, List[Dict]], level1_term: str,
     
     story.append(PageBreak())
     
-    # ========== HIGHLY CITED PAPERS ==========
+    # ========== 4.6. HIGHLY CITED PAPERS (>85th PERCENTILE) ==========
     
-    if highly_cited_papers:
-        story.append(Paragraph("2. HIGHLY CITED PAPERS (>85th PERCENTILE)", title_style))
-        story.append(Spacer(1, 0.5*cm))
+    story.append(Paragraph("2. HIGHLY CITED PAPERS (>85th PERCENTILE)", title_style))
+    story.append(Spacer(1, 0.5*cm))
+    
+    if highly_cited_papers and len(highly_cited_papers) > 0:
+        # Calculate statistics
+        citation_values = [p.get('cited_by_count', 0) for p in highly_cited_papers]
+        mean_citations = np.mean(citation_values) if citation_values else 0
+        median_citations = np.median(citation_values) if citation_values else 0
+        max_citations = max(citation_values) if citation_values else 0
         
         story.append(Paragraph(f"Total highly cited papers: {len(highly_cited_papers)}", subtitle_style))
+        story.append(Spacer(1, 0.3*cm))
+        
+        # Summary statistics table
+        stats_data = [
+            ["Metric", "Value"],
+            ["Total Papers", f"{len(highly_cited_papers):,}"],
+            ["Mean Citations", f"{mean_citations:.1f}"],
+            ["Median Citations", f"{median_citations:.1f}"],
+            ["Maximum Citations", f"{max_citations:,}"],
+            ["Percentage of All Papers", f"{(len(highly_cited_papers)/total_all*100):.1f}%" if total_all > 0 else "0%"]
+        ]
+        
+        stats_table = Table(stats_data, colWidths=[doc.width/2, doc.width/3])
+        stats_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), reportlab_colors.HexColor('#E74C3C')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), reportlab_colors.white),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 11),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), reportlab_colors.HexColor('#F8F9FA')),
+            ('GRID', (0, 0), (-1, -1), 0.5, reportlab_colors.HexColor('#D5DBDB')),
+            ('FONTSIZE', (0, 1), (-1, -1), 10),
+        ]))
+        story.append(stats_table)
+        
+        story.append(Spacer(1, 0.5*cm))
+        
+        # Distribution by topic
+        topic_distribution = defaultdict(int)
+        for paper in highly_cited_papers:
+            topic_distribution[paper.get('topic', 'Unknown')] += 1
+        
+        story.append(Paragraph("Distribution by Topic:", topic_style))
+        story.append(Spacer(1, 0.2*cm))
+        
+        topic_dist_data = [["Topic", "Highly Cited Papers", "Percentage of Topic"]]
+        for topic, count in sorted(topic_distribution.items(), key=lambda x: x[1], reverse=True):
+            topic_total = len(works_by_topic.get(topic, []))
+            topic_pct = (count / topic_total * 100) if topic_total > 0 else 0
+            topic_dist_data.append([topic, str(count), f"{topic_pct:.1f}%"])
+        
+        if len(topic_dist_data) > 1:
+            dist_table = Table(topic_dist_data, colWidths=[doc.width/2, doc.width/4, doc.width/4])
+            dist_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), reportlab_colors.HexColor('#3498DB')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), reportlab_colors.white),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 11),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BACKGROUND', (0, 1), (-1, -1), reportlab_colors.HexColor('#F8F9FA')),
+                ('GRID', (0, 0), (-1, -1), 0.5, reportlab_colors.HexColor('#D5DBDB')),
+                ('FONTSIZE', (0, 1), (-1, -1), 10),
+            ]))
+            story.append(dist_table)
+        
+        story.append(Spacer(1, 0.5*cm))
+        story.append(Paragraph("List of Highly Cited Papers:", topic_style))
         story.append(Spacer(1, 0.3*cm))
         
         for i, paper in enumerate(highly_cited_papers[:50], 1):  # Show top 50 to save space
@@ -3171,7 +3236,7 @@ def generate_pdf_report(works_by_topic: Dict[str, List[Dict]], level1_term: str,
                 story.append(Paragraph(f"Authors: {authors_text}", authors_style))
             
             # Metrics
-            metrics = f"Citations: {paper.get('cited_by_count', 0):,} | Year: {paper.get('publication_year', 'N/A')} | Topic: {paper.get('topic', 'N/A')} | FWCI: {paper.get('fwci', 'N/A')}"
+            metrics = f"Citations: {paper.get('cited_by_count', 0):,} | Year: {paper.get('publication_year', 'N/A')} | Topic: {paper.get('topic', 'N/A')}"
             story.append(Paragraph(metrics, metrics_style))
             
             # DOI
@@ -3190,12 +3255,14 @@ def generate_pdf_report(works_by_topic: Dict[str, List[Dict]], level1_term: str,
             story.append(Spacer(1, 0.2*cm))
             story.append(Paragraph("─" * 30, separator_style))
             story.append(Spacer(1, 0.2*cm))
-        
-        story.append(PageBreak())
+    else:
+        story.append(Paragraph("No highly cited papers found in this dataset.", details_style))
     
-    # ========== TOP 100 BY FWCI ==========
+    story.append(PageBreak())
     
-    story.append(Paragraph("3. TOP 100 PAPERS BY FIELD-WEIGHTED CITATION IMPACT", title_style))
+    # ========== 4.6. FIELD-WEIGHTED CITATION IMPACT ANALYSIS (TOP 100) ==========
+    
+    story.append(Paragraph("3. FIELD-WEIGHTED CITATION IMPACT ANALYSIS (TOP 100)", title_style))
     story.append(Spacer(1, 0.5*cm))
     
     # Collect and sort by FWCI
@@ -3203,17 +3270,93 @@ def generate_pdf_report(works_by_topic: Dict[str, List[Dict]], level1_term: str,
     for topic, works in works_by_topic.items():
         for work in works:
             enriched = enrich_work_data(work)
-            if enriched.get('fwci') is not None:
+            if enriched.get('fwci') is not None and enriched.get('fwci') > 0:
                 enriched['topic'] = topic
                 fwci_papers.append(enriched)
     
-    fwci_papers.sort(key=lambda x: x.get('fwci', 0), reverse=True)
-    
     if fwci_papers:
-        for i, paper in enumerate(fwci_papers[:100], 1):
+        fwci_papers.sort(key=lambda x: x.get('fwci', 0), reverse=True)
+        top_100_fwci = fwci_papers[:100]
+        
+        # Calculate statistics
+        fwci_values = [p.get('fwci', 0) for p in top_100_fwci]
+        mean_fwci = np.mean(fwci_values) if fwci_values else 0
+        median_fwci = np.median(fwci_values) if fwci_values else 0
+        max_fwci = max(fwci_values) if fwci_values else 0
+        
+        story.append(Paragraph(f"Total papers with FWCI data: {len(fwci_papers)}", subtitle_style))
+        story.append(Paragraph(f"Showing Top 100 by FWCI", subtitle_style))
+        story.append(Spacer(1, 0.3*cm))
+        
+        # Summary statistics table
+        fwci_stats_data = [
+            ["Metric", "Value"],
+            ["Papers with FWCI", f"{len(fwci_papers):,}"],
+            ["Mean FWCI (Top 100)", f"{mean_fwci:.2f}"],
+            ["Median FWCI (Top 100)", f"{median_fwci:.2f}"],
+            ["Maximum FWCI", f"{max_fwci:.2f}"],
+            ["Papers with FWCI > 3", f"{sum(1 for p in top_100_fwci if p.get('fwci', 0) > 3)}"],
+            ["Papers with FWCI > 5", f"{sum(1 for p in top_100_fwci if p.get('fwci', 0) > 5)}"]
+        ]
+        
+        fwci_stats_table = Table(fwci_stats_data, colWidths=[doc.width/2, doc.width/3])
+        fwci_stats_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), reportlab_colors.HexColor('#F39C12')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), reportlab_colors.white),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 11),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), reportlab_colors.HexColor('#F8F9FA')),
+            ('GRID', (0, 0), (-1, -1), 0.5, reportlab_colors.HexColor('#D5DBDB')),
+            ('FONTSIZE', (0, 1), (-1, -1), 10),
+        ]))
+        story.append(fwci_stats_table)
+        
+        story.append(Spacer(1, 0.5*cm))
+        
+        # Distribution by FWCI ranges
+        story.append(Paragraph("FWCI Distribution:", topic_style))
+        story.append(Spacer(1, 0.2*cm))
+        
+        fwci_ranges = {
+            '< 1': sum(1 for p in top_100_fwci if p.get('fwci', 0) < 1),
+            '1-2': sum(1 for p in top_100_fwci if 1 <= p.get('fwci', 0) < 2),
+            '2-3': sum(1 for p in top_100_fwci if 2 <= p.get('fwci', 0) < 3),
+            '3-5': sum(1 for p in top_100_fwci if 3 <= p.get('fwci', 0) < 5),
+            '> 5': sum(1 for p in top_100_fwci if p.get('fwci', 0) >= 5)
+        }
+        
+        fwci_range_data = [["FWCI Range", "Number of Papers", "Percentage"]]
+        for range_name, count in fwci_ranges.items():
+            percentage = (count / len(top_100_fwci) * 100) if top_100_fwci else 0
+            fwci_range_data.append([range_name, str(count), f"{percentage:.1f}%"])
+        
+        if len(fwci_range_data) > 1:
+            range_table = Table(fwci_range_data, colWidths=[doc.width/3, doc.width/3, doc.width/3])
+            range_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), reportlab_colors.HexColor('#27AE60')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), reportlab_colors.white),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 11),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BACKGROUND', (0, 1), (-1, -1), reportlab_colors.HexColor('#F8F9FA')),
+                ('GRID', (0, 0), (-1, -1), 0.5, reportlab_colors.HexColor('#D5DBDB')),
+                ('FONTSIZE', (0, 1), (-1, -1), 10),
+            ]))
+            story.append(range_table)
+        
+        story.append(Spacer(1, 0.5*cm))
+        story.append(Paragraph("Top 100 Papers by Field-Weighted Citation Impact:", topic_style))
+        story.append(Spacer(1, 0.3*cm))
+        
+        for i, paper in enumerate(top_100_fwci, 1):
+            # Title with FWCI
             title = clean_text(paper.get('title', 'No title'))
             story.append(Paragraph(f"{i}. {title} (FWCI: {paper.get('fwci', 0):.2f})", paper_title_style))
             
+            # Authors
             authors = paper.get('authors', [])
             if authors:
                 authors_text = ', '.join(authors[:2])
@@ -3221,11 +3364,30 @@ def generate_pdf_report(works_by_topic: Dict[str, List[Dict]], level1_term: str,
                     authors_text += f' et al.'
                 story.append(Paragraph(f"Authors: {authors_text}", authors_style))
             
+            # Metrics
             metrics = f"Citations: {paper.get('cited_by_count', 0):,} | Year: {paper.get('publication_year', 'N/A')} | Topic: {paper.get('topic', 'N/A')}"
             story.append(Paragraph(metrics, details_style))
             
-            if i < 100:
+            # DOI
+            doi = paper.get('doi', '')
+            if doi:
+                if doi.startswith('10.'):
+                    doi_url = f"https://doi.org/{doi}"
+                elif doi.startswith('https://doi.org/'):
+                    doi_url = doi
+                else:
+                    doi_url = f"https://doi.org/{doi}"
+                
+                doi_link = f'<link href="{doi_url}"><font color="blue"><u>{doi}</u></font></link>'
+                story.append(Paragraph(f"DOI: {doi_link}", details_style))
+            
+            story.append(Spacer(1, 0.1*cm))
+            
+            if i < len(top_100_fwci):
+                story.append(Paragraph("─" * 20, separator_style))
                 story.append(Spacer(1, 0.1*cm))
+    else:
+        story.append(Paragraph("No Field-Weighted Citation Impact data available for these papers.", details_style))
     
     story.append(PageBreak())
     
@@ -3239,12 +3401,22 @@ def generate_pdf_report(works_by_topic: Dict[str, List[Dict]], level1_term: str,
             story.append(Paragraph(f"Topic: {topic}", topic_style))
             story.append(Spacer(1, 0.3*cm))
             
+            # Count highly cited in this topic
+            topic_highly_cited = [p for p in (highly_cited_papers or []) if p.get('topic') == topic]
+            if topic_highly_cited:
+                story.append(Paragraph(f"★ {len(topic_highly_cited)} highly cited papers in this topic", metrics_style))
+                story.append(Spacer(1, 0.2*cm))
+            
             for i, work in enumerate(works[:20], 1):  # Show top 20 per topic to save space
                 enriched = enrich_work_data(work)
                 
+                # Check if highly cited
+                is_highly_cited = any(p.get('doi') == enriched.get('doi') for p in (highly_cited_papers or []))
+                star_prefix = "★ " if is_highly_cited else ""
+                
                 # Title
                 title = clean_text(enriched.get('title', 'No title'))
-                story.append(Paragraph(f"{i}. {title}", paper_title_style))
+                story.append(Paragraph(f"{i}. {star_prefix}{title}", paper_title_style))
                 
                 # Authors
                 authors = enriched.get('authors', [])
@@ -3255,7 +3427,8 @@ def generate_pdf_report(works_by_topic: Dict[str, List[Dict]], level1_term: str,
                     story.append(Paragraph(f"Authors: {authors_text}", authors_style))
                 
                 # Metrics
-                metrics = f"Citations: {enriched.get('cited_by_count', 0):,} | Year: {enriched.get('publication_year', 'N/A')} | OA: {'Yes' if enriched.get('is_oa') else 'No'} | FWCI: {enriched.get('fwci', 'N/A')}"
+                fwci_text = f" | FWCI: {enriched.get('fwci', 0):.2f}" if enriched.get('fwci') is not None else ""
+                metrics = f"Citations: {enriched.get('cited_by_count', 0):,} | Year: {enriched.get('publication_year', 'N/A')} | OA: {'Yes' if enriched.get('is_oa') else 'No'}{fwci_text}"
                 story.append(Paragraph(metrics, metrics_style))
                 
                 # DOI
@@ -3280,10 +3453,15 @@ def generate_pdf_report(works_by_topic: Dict[str, List[Dict]], level1_term: str,
     story.append(Paragraph("CONCLUSION", title_style))
     story.append(Spacer(1, 0.5*cm))
     
+    # Collect final statistics
+    n_highly_cited = len(highly_cited_papers) if highly_cited_papers else 0
+    n_with_fwci = len([p for topic, works in works_by_topic.items() for p in works if enrich_work_data(p).get('fwci') is not None])
+    
     conclusions = [
         f"This report analyzed {total_papers:,} papers across {len([t for t, w in works_by_topic.items() if w])} topics.",
-        f"Identified {len(highly_cited_papers) if highly_cited_papers else 0} highly cited papers (>85th percentile).",
-        "The analysis provides insights into the distribution and impact of research in these areas.",
+        f"Identified {n_highly_cited} highly cited papers (>85th percentile), representing the most impactful research in this field.",
+        f"Field-Weighted Citation Impact data available for {n_with_fwci} papers, with top performers highlighted.",
+        "The analysis provides comprehensive insights into the distribution, impact, and trends of research in these areas.",
         "For the most current data, please visit the original sources via the provided DOIs."
     ]
     
@@ -4054,6 +4232,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
