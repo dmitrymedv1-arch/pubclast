@@ -45,16 +45,26 @@ except ImportError:
 # SCIENTIFIC COLOR PALETTES FOR PUBLICATIONS
 # ============================================================================
 
-# Colorblind-friendly palettes for scientific publications
-COLOR_PALETTES_SCIENTIFIC = {
+# Colorblind-friendly palettes for scientific publications - DISCRETE
+COLOR_PALETTES_SCIENTIFIC_DISCRETE = {
     'nature': ['#E64B35', '#4DBBD5', '#00A087', '#3C5488', '#F39B7F', '#8491B4', '#91D1C2', '#DC0000', '#7E6148', '#B09C85'],
     'science': ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'],
     'matplotlib': ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'],
     'colorblind': ['#0072B2', '#D55E00', '#009E73', '#CC79A7', '#F0E442', '#56B4E9', '#E69F00', '#000000', '#999999', '#882255'],
-    'vibrant': ['#EE7733', '#0077BB', '#33BBEE', '#EE3377', '#CC3311', '#009988', '#BBBBBB', '#999933', '#882255', '#AA4499']
+    'vibrant': ['#EE7733', '#0077BB', '#33BBEE', '#EE3377', '#CC3311', '#009988', '#BBBBBB', '#999933', '#882255', '#AA4499'],
+    'ggplot': ['#F8766D', '#7CAE00', '#00BFC4', '#C77CFF', '#FF61CC', '#A3A500', '#00A9FF', '#E68613', '#B983FF', '#00CDCD'],
+    'seaborn': ['#4C72B0', '#55A868', '#C44E52', '#8172B2', '#CCB974', '#64B5CD', '#8C8C8C', '#A1A9B0', '#B0A1BA', '#F0B27A'],
+    'tableau': ['#1F77B4', '#FF7F0E', '#2CA02C', '#D62728', '#9467BD', '#8C564B', '#E377C2', '#7F7F7F', '#BCBD22', '#17BECF'],
+    'brewer_Set1': ['#E41A1C', '#377EB8', '#4DAF4A', '#984EA3', '#FF7F00', '#FFFF33', '#A65628', '#F781BF', '#999999', '#66C2A5'],
+    'brewer_Set2': ['#66C2A5', '#FC8D62', '#8DA0CB', '#E78AC3', '#A6D854', '#FFD92F', '#E5C494', '#B3B3B3', '#8DD3C7', '#FFFFB3'],
+    'brewer_Set3': ['#8DD3C7', '#FFFFB3', '#BEBADA', '#FB8072', '#80B1D3', '#FDB462', '#B3DE69', '#FCCDE5', '#D9D9D9', '#BC80BD'],
+    'brewer_Paired': ['#A6CEE3', '#1F78B4', '#B2DF8A', '#33A02C', '#FB9A99', '#E31A23', '#FDBF6F', '#FF7F00', '#CAB2D6', '#6A3D9A'],
+    'brewer_Dark2': ['#1B9E77', '#D95F02', '#7570B3', '#E7298A', '#66A61E', '#E6AB02', '#A6761D', '#666666', '#1B9E77', '#D95F02'],
+    'brewer_Accent': ['#7FC97F', '#BEAED4', '#FDC086', '#FFFF99', '#386CB0', '#F0027F', '#BF5B17', '#666666', '#1B9E77', '#D95F02'],
+    'custom_bright': ['#FF0010', '#10FF00', '#0010FF', '#FFD700', '#FF00FF', '#00FFFF', '#FFA500', '#800080', '#008000', '#800000']
 }
 
-# Gradient palettes for continuous data
+# Gradient palettes for continuous data - 15 VARIANTS
 GRADIENT_PALETTES = {
     'viridis': plt.cm.viridis,
     'plasma': plt.cm.plasma,
@@ -63,17 +73,14 @@ GRADIENT_PALETTES = {
     'cividis': plt.cm.cividis,
     'coolwarm': plt.cm.coolwarm,
     'RdYlBu': plt.cm.RdYlBu,
-    'Spectral': plt.cm.Spectral
-}
-
-# Single color palettes for bar charts
-SINGLE_COLOR_PALETTES = {
-    'nature_blue': '#2C3E50',
-    'nature_green': '#27AE60',
-    'nature_red': '#E74C3C',
-    'nature_purple': '#8E44AD',
-    'nature_orange': '#F39C12',
-    'nature_teal': '#16A085'
+    'Spectral': plt.cm.Spectral,
+    'Blues': plt.cm.Blues,
+    'Reds': plt.cm.Reds,
+    'Greens': plt.cm.Greens,
+    'Purples': plt.cm.Purples,
+    'Oranges': plt.cm.Oranges,
+    'Greys': plt.cm.Greys,
+    'YlOrRd': plt.cm.YlOrRd
 }
 
 # ============================================================================
@@ -88,10 +95,10 @@ st.set_page_config(
 )
 
 # ============================================================================
-# EXTENDED COLOR PALETTES (10 VARIANTS)
+# EXTENDED COLOR PALETTES (10 VARIANTS) - FOR UI ONLY
 # ============================================================================
 
-COLOR_PALETTES = [
+UI_COLOR_PALETTES = [
     {
         'name': 'Ocean Blues',
         'primary': '#0066cc',
@@ -224,11 +231,17 @@ COLOR_PALETTES = [
     }
 ]
 
-# Select random palette at startup
-if 'color_palette' not in st.session_state:
-    st.session_state['color_palette'] = random.choice(COLOR_PALETTES)
+# Select random UI palette at startup
+if 'ui_color_palette' not in st.session_state:
+    st.session_state['ui_color_palette'] = random.choice(UI_COLOR_PALETTES)
 
-colors = st.session_state['color_palette']
+# Initialize color palette selections for plots
+if 'discrete_palette_name' not in st.session_state:
+    st.session_state['discrete_palette_name'] = 'nature'
+if 'gradient_palette_name' not in st.session_state:
+    st.session_state['gradient_palette_name'] = 'viridis'
+
+ui_colors = st.session_state['ui_color_palette']
 
 # ============================================================================
 # SCIENTIFIC STYLE FOR PLOTS (INDEPENDENT FROM UI)
@@ -288,7 +301,7 @@ plt.style.use('default')
 plt.rcParams.update(SCIENTIFIC_STYLE)
 
 # ============================================================================
-# CUSTOM STYLES
+# CUSTOM UI STYLES (ONLY FOR INTERFACE, NOT PLOTS)
 # ============================================================================
 
 st.markdown(f"""
@@ -296,27 +309,27 @@ st.markdown(f"""
     .main-header {{
         font-size: 2.2rem;
         font-weight: 700;
-        background: linear-gradient(135deg, {colors['gradient_start']} 0%, {colors['gradient_end']} 100%);
+        background: linear-gradient(135deg, {ui_colors['gradient_start']} 0%, {ui_colors['gradient_end']} 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         margin-bottom: 0.8rem;
     }}
     
     .step-card {{
-        background: linear-gradient(135deg, {colors['gradient_start']}15 0%, {colors['gradient_end']}15 100%);
+        background: linear-gradient(135deg, {ui_colors['gradient_start']}15 0%, {ui_colors['gradient_end']}15 100%);
         border-radius: 12px;
         padding: 18px;
-        border-left: 4px solid {colors['primary']};
+        border-left: 4px solid {ui_colors['primary']};
         margin-bottom: 15px;
         box-shadow: 0 3px 5px rgba(0, 0, 0, 0.04);
     }}
     
     .metric-card {{
-        background: {colors['card_bg']};
+        background: {ui_colors['card_bg']};
         border-radius: 10px;
         padding: 15px;
         box-shadow: 0 3px 10px rgba(0, 0, 0, 0.06);
-        border: 1px solid {colors['border']};
+        border: 1px solid {ui_colors['border']};
         height: 100%;
         min-height: 90px;
     }}
@@ -324,30 +337,30 @@ st.markdown(f"""
     .metric-card h4 {{
         font-size: 0.85rem;
         margin: 0 0 8px 0;
-        color: {colors['accent1']};
+        color: {ui_colors['accent1']};
     }}
     
     .metric-card .value {{
         font-size: 1.6rem;
         font-weight: 700;
-        color: {colors['text']};
+        color: {ui_colors['text']};
         line-height: 1.2;
     }}
     
     .result-card {{
-        background: {colors['card_bg']};
+        background: {ui_colors['card_bg']};
         border-radius: 10px;
         padding: 15px;
         margin-bottom: 12px;
-        border-left: 3px solid {colors['primary']};
+        border-left: 3px solid {ui_colors['primary']};
         box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
     }}
     
     .info-message {{
-        background: linear-gradient(135deg, {colors['primary']}15 0%, {colors['secondary']}15 100%);
+        background: linear-gradient(135deg, {ui_colors['primary']}15 0%, {ui_colors['secondary']}15 100%);
         border-radius: 8px;
         padding: 12px;
-        border-left: 3px solid {colors['primary']};
+        border-left: 3px solid {ui_colors['primary']};
         font-size: 0.9rem;
         margin: 10px 0;
     }}
@@ -372,17 +385,17 @@ st.markdown(f"""
     .filter-header {{
         font-size: 1.1rem;
         font-weight: 600;
-        color: {colors['accent1']};
+        color: {ui_colors['accent1']};
         margin-bottom: 12px;
         padding-bottom: 8px;
-        border-bottom: 2px solid {colors['primary']};
+        border-bottom: 2px solid {ui_colors['primary']};
     }}
     
     .filter-stats {{
-        background: {colors['card_bg']};
+        background: {ui_colors['card_bg']};
         border-radius: 8px;
         padding: 12px;
-        border: 1px solid {colors['border']};
+        border: 1px solid {ui_colors['border']};
         margin-bottom: 15px;
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
     }}
@@ -405,14 +418,14 @@ st.markdown(f"""
     }}
     
     .year-checkbox-item:hover {{
-        border-color: {colors['primary']};
-        background-color: {colors['background']};
+        border-color: {ui_colors['primary']};
+        background-color: {ui_colors['background']};
     }}
     
     .year-checkbox-item.selected {{
-        background: linear-gradient(135deg, {colors['primary']}15 0%, {colors['secondary']}15 100%);
-        border-color: {colors['primary']};
-        color: {colors['primary']};
+        background: linear-gradient(135deg, {ui_colors['primary']}15 0%, {ui_colors['secondary']}15 100%);
+        border-color: {ui_colors['primary']};
+        color: {ui_colors['primary']};
         font-weight: 600;
     }}
     
@@ -420,23 +433,23 @@ st.markdown(f"""
         background: white;
         border-radius: 8px;
         padding: 15px;
-        border: 1px solid {colors['border']};
+        border: 1px solid {ui_colors['border']};
         margin: 20px 0;
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
     }}
     
     .scientific-plot h4 {{
-        color: {colors['accent1']};
+        color: {ui_colors['accent1']};
         font-weight: 600;
         margin-bottom: 15px;
         padding-bottom: 8px;
-        border-bottom: 2px solid {colors['primary']};
+        border-bottom: 2px solid {ui_colors['primary']};
     }}
     
     .back-button {{
-        background-color: {colors['background']};
-        color: {colors['primary']};
-        border: 2px solid {colors['primary']};
+        background-color: {ui_colors['background']};
+        color: {ui_colors['primary']};
+        border: 2px solid {ui_colors['primary']};
         border-radius: 8px;
         padding: 0.5rem 1rem;
         font-weight: 600;
@@ -445,7 +458,7 @@ st.markdown(f"""
     }}
     
     .back-button:hover {{
-        background-color: {colors['primary']};
+        background-color: {ui_colors['primary']};
         color: white;
     }}
 </style>
@@ -606,7 +619,7 @@ def create_result_card(work: dict, index: int, topic: str):
     <div class="result-card">
         <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
             <div>
-                <span style="font-weight: 600; color: {colors['primary']}; margin-right: 8px;">{topic} #{index}</span>
+                <span style="font-weight: 600; color: {ui_colors['primary']}; margin-right: 8px;">{topic} #{index}</span>
                 <span style="background: {badge_color}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem;">
                     {badge_text}
                 </span>
@@ -620,7 +633,7 @@ def create_result_card(work: dict, index: int, topic: str):
         <div style="color: #555; font-size: 0.85rem; margin-bottom: 5px;">👤 {authors}</div>
         <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
             <span>{oa_badge} {work.get('journal', '')[:30]}</span>
-            <a href="{doi_url}" target="_blank" style="color: {colors['primary']}; text-decoration: none; font-size: 0.85rem;">
+            <a href="{doi_url}" target="_blank" style="color: {ui_colors['primary']}; text-decoration: none; font-size: 0.85rem;">
                 🔗 View Article
             </a>
         </div>
@@ -900,7 +913,8 @@ def enrich_work_data(work: Dict) -> Dict:
         'cited_by_count': work.get('cited_by_count', 0),
         'type': work.get('type', ''),
         'doi_url': f"https://doi.org/{doi_clean}" if doi_clean else '',
-        'relevance_score': work.get('relevance_score', 0)
+        'relevance_score': work.get('relevance_score', 0),
+        'fwci': work.get('fwci', None)  # Field-Weighted Citation Impact
     }
     
     # Authors
@@ -966,16 +980,17 @@ def get_citation_distribution_group_by(level1_term: str, level2_term: Optional[s
                                       level3_term: str, years: List[int]) -> Dict[str, int]:
     """
     Get citation distribution using group_by with filters for citation ranges.
-    Makes 4 separate API requests to get exact counts for each citation category.
+    Makes 7 separate API requests to get exact counts for each citation category.
     """
     base_filters = build_search_filter(level1_term, level2_term)
     
-    # Define citation ranges
+    # Define citation ranges - UPDATED TO 7 CATEGORIES
     citation_ranges = {
         '0': 'cited_by_count:0',
-        '1-3': 'cited_by_count:1-3',
-        '4-10': 'cited_by_count:4-10',
-        '11-50': 'cited_by_count:11-50',
+        '1-4': 'cited_by_count:1-4',
+        '5-10': 'cited_by_count:5-10',
+        '11-30': 'cited_by_count:11-30',
+        '31-50': 'cited_by_count:31-50',
         '51-100': 'cited_by_count:51-100',
         '100+': 'cited_by_count:>100'
     }
@@ -1013,6 +1028,74 @@ def get_citation_distribution_group_by(level1_term: str, level2_term: Optional[s
         time.sleep(0.1)  # Small delay to be polite to API
     
     return distribution
+
+def get_yearly_citations(level1_term: str, level2_term: Optional[str],
+                        level3_term: str, years: List[int],
+                        top_works: List[Dict]) -> Dict[int, int]:
+    """
+    Get yearly citation counts for a sub-topic.
+    Aggregates citations from top works by year.
+    """
+    yearly_citations = {year: 0 for year in years}
+    
+    for work in top_works:
+        year = work.get('publication_year')
+        citations = work.get('cited_by_count', 0)
+        if year in yearly_citations:
+            yearly_citations[year] += citations
+    
+    return yearly_citations
+
+def get_journal_data(all_works_by_topic: Dict[str, List[Dict]]) -> Dict:
+    """
+    Collect comprehensive journal data for analysis.
+    """
+    journal_data = defaultdict(lambda: {
+        'total_papers': 0,
+        'topics': defaultdict(int),
+        'citations': [],
+        'papers_by_year': defaultdict(int)
+    })
+    
+    for topic, works in all_works_by_topic.items():
+        for work in works:
+            enriched = enrich_work_data(work)
+            journal = enriched.get('journal', 'Unknown Journal')
+            if journal and journal != 'Unknown Journal':
+                journal_data[journal]['total_papers'] += 1
+                journal_data[journal]['topics'][topic] += 1
+                journal_data[journal]['citations'].append(enriched.get('cited_by_count', 0))
+                journal_data[journal]['papers_by_year'][enriched.get('publication_year', 0)] += 1
+    
+    return journal_data
+
+def calculate_percentile_threshold(citations: List[int], percentile: float = 85) -> float:
+    """
+    Calculate citation threshold for given percentile.
+    """
+    if not citations:
+        return 0
+    return np.percentile(citations, percentile)
+
+def get_highly_cited_papers(works_by_topic: Dict[str, List[Dict]], percentile: float = 85) -> List[Dict]:
+    """
+    Get papers above the given citation percentile.
+    """
+    all_papers = []
+    for topic, works in works_by_topic.items():
+        for work in works:
+            enriched = enrich_work_data(work)
+            enriched['topic'] = topic
+            all_papers.append(enriched)
+    
+    if not all_papers:
+        return []
+    
+    citations = [p.get('cited_by_count', 0) for p in all_papers]
+    threshold = calculate_percentile_threshold(citations, percentile)
+    
+    highly_cited = [p for p in all_papers if p.get('cited_by_count', 0) >= threshold]
+    return sorted(highly_cited, key=lambda x: x.get('cited_by_count', 0), reverse=True)
 
 def calculate_gini_coefficient(citations: List[int]) -> float:
     """
@@ -1068,7 +1151,7 @@ def get_consistent_topic_data(level1_term: str, level2_term: Optional[str],
     """
     Get consistent data for all topics using hybrid approach:
     - group_by for yearly distributions (single request per topic)
-    - group_by for citation distributions (4 requests per topic)
+    - group_by for citation distributions (7 requests per topic)
     - topic_counts from the same group_by data (sum of yearly)
     - fetch top papers for detailed view (limited)
     
@@ -1089,7 +1172,7 @@ def get_consistent_topic_data(level1_term: str, level2_term: Optional[str],
             level1_term, level2_term, term, years
         )
         
-        # Step 2: Get citation distribution using group_by (4 requests)
+        # Step 2: Get citation distribution using group_by (7 requests)
         citation_dist = get_citation_distribution_group_by(
             level1_term, level2_term, term, years
         )
@@ -1105,7 +1188,12 @@ def get_consistent_topic_data(level1_term: str, level2_term: Optional[str],
                 limit=max_papers_to_fetch
             )
         
-        # Step 5: Calculate enhanced citation stats from top works
+        # Step 5: Calculate yearly citations from top works
+        yearly_citations = get_yearly_citations(
+            level1_term, level2_term, term, years, top_works
+        )
+        
+        # Step 6: Calculate enhanced citation stats from top works
         citation_stats = {}
         if top_works:
             citations = [w.get('cited_by_count', 0) for w in top_works]
@@ -1137,9 +1225,10 @@ def get_consistent_topic_data(level1_term: str, level2_term: Optional[str],
                 'median_velocity': float(np.median(velocities)),
                 'distribution': {
                     '0': int(sum(1 for c in citations if c == 0)),
-                    '1-3': int(sum(1 for c in citations if 1 <= c <= 3)),
-                    '4-10': int(sum(1 for c in citations if 4 <= c <= 10)),
-                    '11-50': int(sum(1 for c in citations if 11 <= c <= 50)),
+                    '1-4': int(sum(1 for c in citations if 1 <= c <= 4)),
+                    '5-10': int(sum(1 for c in citations if 5 <= c <= 10)),
+                    '11-30': int(sum(1 for c in citations if 11 <= c <= 30)),
+                    '31-50': int(sum(1 for c in citations if 31 <= c <= 50)),
                     '51-100': int(sum(1 for c in citations if 51 <= c <= 100)),
                     '100+': int(sum(1 for c in citations if c > 100))
                 },
@@ -1147,7 +1236,7 @@ def get_consistent_topic_data(level1_term: str, level2_term: Optional[str],
                 'highly_cited_100': int(sum(1 for c in citations if c > 100))
             }
         
-        # Step 6: Calculate CAGR for last 5 years if enough data
+        # Step 7: Calculate CAGR for last 5 years if enough data
         cagr_data = {}
         if len(years) >= 5:
             recent_years = sorted(years)[-5:]
@@ -1163,7 +1252,7 @@ def get_consistent_topic_data(level1_term: str, level2_term: Optional[str],
                     'end_count': end_count
                 }
         
-        # Step 7: Find peak year
+        # Step 8: Find peak year
         peak_year = None
         peak_count = 0
         for year, count in yearly_dist.items():
@@ -1174,7 +1263,8 @@ def get_consistent_topic_data(level1_term: str, level2_term: Optional[str],
         consistent_data[term] = {
             'total': total_papers,
             'yearly': yearly_dist,  # Exact data from group_by
-            'citation_distribution': citation_dist,  # Exact counts from group_by
+            'yearly_citations': yearly_citations,  # Yearly citation sums
+            'citation_distribution': citation_dist,  # Exact counts from group_by (7 categories)
             'top_works': top_works,
             'citation_stats': citation_stats,
             'cagr': cagr_data,
@@ -1188,13 +1278,1028 @@ def get_consistent_topic_data(level1_term: str, level2_term: Optional[str],
     return consistent_data
 
 # ============================================================================
-# ENHANCED VISUALIZATION FUNCTIONS
+# ENHANCED VISUALIZATION FUNCTIONS - ALL USING SCIENTIFIC STYLE
 # ============================================================================
 
+def get_current_palettes():
+    """Get currently selected color palettes"""
+    discrete_name = st.session_state.get('discrete_palette_name', 'nature')
+    gradient_name = st.session_state.get('gradient_palette_name', 'viridis')
+    
+    discrete_palette = COLOR_PALETTES_SCIENTIFIC_DISCRETE.get(discrete_name, COLOR_PALETTES_SCIENTIFIC_DISCRETE['nature'])
+    gradient_palette = GRADIENT_PALETTES.get(gradient_name, GRADIENT_PALETTES['viridis'])
+    
+    return discrete_palette, gradient_palette
+
+def create_subtopic_distribution_absolute(topic_counts: Dict[str, int], level2_count: int):
+    """
+    4.1.1. Гистограмма с общим числом публикаций по запросам с учетом фильтров
+    Внутри гистограммы должна быть легенда с общим числом статей по всем Sub-topic,
+    а также отдельная легенда по числу статей по каждому Sub-topic
+    """
+    if not topic_counts:
+        return None
+    
+    discrete_palette, _ = get_current_palettes()
+    
+    # Filter zero values
+    non_zero = {k: v for k, v in topic_counts.items() if v > 0}
+    if not non_zero:
+        return None
+    
+    topics = list(non_zero.keys())
+    counts = list(non_zero.values())
+    total_papers = sum(counts)
+    
+    # Sort descending
+    sorted_idx = np.argsort(counts)[::-1]
+    topics = [topics[i] for i in sorted_idx]
+    counts = [counts[i] for i in sorted_idx]
+    
+    # Create figure
+    fig, ax = plt.subplots(figsize=(10, max(6, len(topics) * 0.4)))
+    
+    # Create horizontal bars
+    y_pos = np.arange(len(topics))
+    colors = discrete_palette[:len(topics)] if len(topics) <= len(discrete_palette) else plt.cm.tab20(np.linspace(0, 1, len(topics)))
+    
+    bars = ax.barh(y_pos, counts, color=colors, edgecolor='black', linewidth=0.5)
+    
+    # Customize plot
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(topics, fontsize=9)
+    ax.set_xlabel('Number of Publications', fontsize=10, fontweight='bold')
+    ax.set_title(f'Sub-topic Distribution - Absolute Counts\nTotal papers: {total_papers:,}', 
+                fontsize=12, fontweight='bold', pad=10)
+    
+    # Add value labels on bars
+    for i, (bar, count) in enumerate(zip(bars, counts)):
+        ax.text(count + max(counts)*0.01, bar.get_y() + bar.get_height()/2,
+                f'{count:,}', va='center', fontsize=9, fontweight='bold')
+    
+    # Add total count annotation
+    ax.text(0.98, 0.02, f'Total: {total_papers:,} papers', 
+            transform=ax.transAxes, ha='right', va='bottom',
+            fontsize=10, fontweight='bold',
+            bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='black'))
+    
+    plt.tight_layout()
+    return fig
+
+def create_subtopic_distribution_percentage(topic_counts: Dict[str, int], level2_count: int):
+    """
+    4.1.2. Аналогичная гистограмма, представленная в процентах
+    Сумма процентов всех столбиков должна равна 100%
+    """
+    if not topic_counts:
+        return None
+    
+    discrete_palette, _ = get_current_palettes()
+    
+    # Filter zero values
+    non_zero = {k: v for k, v in topic_counts.items() if v > 0}
+    if not non_zero:
+        return None
+    
+    topics = list(non_zero.keys())
+    counts = list(non_zero.values())
+    total_papers = sum(counts)
+    percentages = [(c / total_papers * 100) if total_papers > 0 else 0 for c in counts]
+    
+    # Sort descending
+    sorted_idx = np.argsort(counts)[::-1]
+    topics = [topics[i] for i in sorted_idx]
+    percentages = [percentages[i] for i in sorted_idx]
+    counts = [counts[i] for i in sorted_idx]
+    
+    # Create figure
+    fig, ax = plt.subplots(figsize=(10, max(6, len(topics) * 0.4)))
+    
+    # Create horizontal bars
+    y_pos = np.arange(len(topics))
+    colors = discrete_palette[:len(topics)] if len(topics) <= len(discrete_palette) else plt.cm.tab20(np.linspace(0, 1, len(topics)))
+    
+    bars = ax.barh(y_pos, percentages, color=colors, edgecolor='black', linewidth=0.5)
+    
+    # Customize plot
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(topics, fontsize=9)
+    ax.set_xlabel('Percentage of Publications (%)', fontsize=10, fontweight='bold')
+    ax.set_title(f'Sub-topic Distribution - Percentage\nTotal papers: {total_papers:,} (100%)', 
+                fontsize=12, fontweight='bold', pad=10)
+    ax.set_xlim(0, 100)
+    
+    # Add value labels on bars
+    for i, (bar, pct, count) in enumerate(zip(bars, percentages, counts)):
+        ax.text(pct + 1, bar.get_y() + bar.get_height()/2,
+                f'{pct:.1f}% ({count:,})', va='center', fontsize=9, fontweight='bold')
+    
+    plt.tight_layout()
+    return fig
+
+def create_stacked_yearly_chart(consistent_data: Dict[str, Dict], years: List[int], level2_term: Optional[str] = None):
+    """
+    4.2.1. Сводная гистограмма с накоплением числа публикаций от года
+    """
+    if not consistent_data:
+        return None
+    
+    discrete_palette, _ = get_current_palettes()
+    
+    # Get topics with data
+    topics = [t for t, data in consistent_data.items() if data['total'] > 0]
+    if not topics:
+        return None
+    
+    # Sort years
+    years_sorted = sorted(years)
+    
+    # Create figure
+    fig, ax = plt.subplots(figsize=(12, 7))
+    
+    # Prepare data for stacking
+    bottom = np.zeros(len(years_sorted))
+    colors = discrete_palette[:len(topics)] if len(topics) <= len(discrete_palette) else plt.cm.tab20(np.linspace(0, 1, len(topics)))
+    
+    # Create stacked bars
+    for idx, topic in enumerate(topics):
+        yearly_data = consistent_data[topic]['yearly']
+        counts = [yearly_data.get(year, 0) for year in years_sorted]
+        
+        ax.bar(years_sorted, counts, bottom=bottom, label=f"{topic} ({consistent_data[topic]['total']:,})",
+               color=colors[idx], edgecolor='black', linewidth=0.5, width=0.8)
+        bottom += np.array(counts)
+    
+    # Customize plot
+    ax.set_xlabel('Publication Year', fontsize=11, fontweight='bold')
+    ax.set_ylabel('Number of Publications', fontsize=11, fontweight='bold')
+    ax.set_title(f'Stacked Yearly Distribution' + (f' with {level2_term}' if level2_term else ''),
+                fontsize=12, fontweight='bold', pad=10)
+    
+    ax.set_xticks(years_sorted)
+    ax.set_xticklabels([str(y) for y in years_sorted], rotation=45, ha='right')
+    
+    # Add legend
+    ax.legend(fontsize=9, frameon=True, edgecolor='black', loc='upper left', bbox_to_anchor=(1, 1))
+    
+    # Add total count
+    total_papers = sum(bottom)
+    ax.text(0.02, 0.98, f'Total: {total_papers:,} papers',
+            transform=ax.transAxes, ha='left', va='top',
+            fontsize=10, fontweight='bold',
+            bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='black'))
+    
+    plt.tight_layout()
+    return fig
+
+def create_grouped_yearly_chart(consistent_data: Dict[str, Dict], years: List[int], level2_term: Optional[str] = None):
+    """
+    4.2.2. Сводная гистограмма с группировкой числа публикаций от года
+    """
+    if not consistent_data:
+        return None
+    
+    discrete_palette, _ = get_current_palettes()
+    
+    # Get topics with data
+    topics = [t for t, data in consistent_data.items() if data['total'] > 0]
+    if not topics:
+        return None
+    
+    # Sort years
+    years_sorted = sorted(years)
+    
+    # Create figure
+    fig, ax = plt.subplots(figsize=(14, 7))
+    
+    # Prepare data for grouped bars
+    n_topics = len(topics)
+    n_years = len(years_sorted)
+    width = 0.8 / n_topics  # Width of each bar
+    
+    colors = discrete_palette[:n_topics] if n_topics <= len(discrete_palette) else plt.cm.tab20(np.linspace(0, 1, n_topics))
+    
+    # Create grouped bars
+    for idx, topic in enumerate(topics):
+        yearly_data = consistent_data[topic]['yearly']
+        counts = [yearly_data.get(year, 0) for year in years_sorted]
+        
+        x_pos = np.arange(n_years) + idx * width - (n_topics * width / 2) + width/2
+        bars = ax.bar(x_pos, counts, width, label=f"{topic} ({consistent_data[topic]['total']:,})",
+                      color=colors[idx], edgecolor='black', linewidth=0.5)
+        
+        # Add small value labels for non-zero bars
+        for bar, count in zip(bars, counts):
+            if count > 0:
+                ax.text(bar.get_x() + bar.get_width()/2, bar.get_height(),
+                        f'{count}', ha='center', va='bottom', fontsize=7, rotation=90)
+    
+    # Customize plot
+    ax.set_xlabel('Publication Year', fontsize=11, fontweight='bold')
+    ax.set_ylabel('Number of Publications', fontsize=11, fontweight='bold')
+    ax.set_title(f'Grouped Yearly Distribution' + (f' with {level2_term}' if level2_term else ''),
+                fontsize=12, fontweight='bold', pad=10)
+    
+    ax.set_xticks(np.arange(n_years))
+    ax.set_xticklabels([str(y) for y in years_sorted], rotation=45, ha='right')
+    
+    # Add legend
+    ax.legend(fontsize=9, frameon=True, edgecolor='black', loc='upper left', bbox_to_anchor=(1, 1))
+    
+    # Add grid for better readability
+    ax.grid(True, alpha=0.3, linestyle='--', axis='y')
+    
+    plt.tight_layout()
+    return fig
+
+def create_normalized_yearly_chart(consistent_data: Dict[str, Dict], years: List[int], level2_term: Optional[str] = None):
+    """
+    4.2.3. Сводная гистограмма с группировкой числа публикаций от года,
+    нормированных на максимальное число публикации по какому-либо Sub-topic в какой-либо год
+    """
+    if not consistent_data:
+        return None
+    
+    discrete_palette, _ = get_current_palettes()
+    
+    # Get topics with data
+    topics = [t for t, data in consistent_data.items() if data['total'] > 0]
+    if not topics:
+        return None
+    
+    # Sort years
+    years_sorted = sorted(years)
+    
+    # Find global maximum across all topics and years
+    global_max = 0
+    for topic in topics:
+        yearly_data = consistent_data[topic]['yearly']
+        global_max = max(global_max, max(yearly_data.values()) if yearly_data else 0)
+    
+    if global_max == 0:
+        return None
+    
+    # Create figure
+    fig, ax = plt.subplots(figsize=(14, 7))
+    
+    # Prepare data for grouped bars
+    n_topics = len(topics)
+    n_years = len(years_sorted)
+    width = 0.8 / n_topics
+    
+    colors = discrete_palette[:n_topics] if n_topics <= len(discrete_palette) else plt.cm.tab20(np.linspace(0, 1, n_topics))
+    
+    # Create grouped bars with normalized values
+    for idx, topic in enumerate(topics):
+        yearly_data = consistent_data[topic]['yearly']
+        normalized_counts = [yearly_data.get(year, 0) / global_max for year in years_sorted]
+        actual_counts = [yearly_data.get(year, 0) for year in years_sorted]
+        
+        x_pos = np.arange(n_years) + idx * width - (n_topics * width / 2) + width/2
+        bars = ax.bar(x_pos, normalized_counts, width, label=f"{topic} ({consistent_data[topic]['total']:,})",
+                      color=colors[idx], edgecolor='black', linewidth=0.5)
+        
+        # Add small value labels for bars with significant height
+        for bar, norm, actual in zip(bars, normalized_counts, actual_counts):
+            if actual > 0:
+                ax.text(bar.get_x() + bar.get_width()/2, bar.get_height(),
+                        f'{actual}', ha='center', va='bottom', fontsize=7, rotation=90)
+    
+    # Customize plot
+    ax.set_xlabel('Publication Year', fontsize=11, fontweight='bold')
+    ax.set_ylabel('Normalized Publication Count (max=1)', fontsize=11, fontweight='bold')
+    ax.set_title(f'Normalized Yearly Distribution\n(Normalized to global maximum: {global_max:,} papers)',
+                fontsize=12, fontweight='bold', pad=10)
+    
+    ax.set_xticks(np.arange(n_years))
+    ax.set_xticklabels([str(y) for y in years_sorted], rotation=45, ha='right')
+    ax.set_ylim(0, 1.1)
+    
+    # Add legend
+    ax.legend(fontsize=9, frameon=True, edgecolor='black', loc='upper left', bbox_to_anchor=(1, 1))
+    
+    # Add grid for better readability
+    ax.grid(True, alpha=0.3, linestyle='--', axis='y')
+    
+    plt.tight_layout()
+    return fig
+
+def create_topic_yearly_publications(topic: str, data: Dict, years: List[int]):
+    """
+    4.3.1. Отдельные гистограммы публикаций каждого конкретного Sub-topic по годам с color-map
+    """
+    if data['total'] == 0:
+        return None
+    
+    _, gradient_palette = get_current_palettes()
+    
+    years_sorted = sorted(years)
+    counts = [data['yearly'].get(year, 0) for year in years_sorted]
+    
+    fig, ax = plt.subplots(figsize=(12, 6))
+    
+    # Create color gradient based on counts
+    norm = plt.Normalize(min(counts) if min(counts) > 0 else 0, max(counts))
+    colors = gradient_palette(norm(counts))
+    
+    bars = ax.bar(years_sorted, counts, color=colors, edgecolor='black', linewidth=0.5, width=0.8)
+    
+    # Customize plot
+    ax.set_xlabel('Publication Year', fontsize=11, fontweight='bold')
+    ax.set_ylabel('Number of Publications', fontsize=11, fontweight='bold')
+    ax.set_title(f'{topic}: Publications by Year\nTotal: {data["total"]:,} papers', 
+                fontsize=12, fontweight='bold', pad=10)
+    
+    ax.set_xticks(years_sorted)
+    ax.set_xticklabels([str(y) for y in years_sorted], rotation=45, ha='right')
+    
+    # Add value labels on bars
+    for bar, count in zip(bars, counts):
+        if count > 0:
+            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height(),
+                   f'{count}', ha='center', va='bottom', fontsize=8, fontweight='bold')
+    
+    # Add colorbar
+    sm = plt.cm.ScalarMappable(cmap=gradient_palette, norm=norm)
+    sm.set_array([])
+    cbar = plt.colorbar(sm, ax=ax, pad=0.02)
+    cbar.set_label('Publication Intensity', fontsize=9)
+    
+    # Verify total matches
+    ax.text(0.98, 0.98, f'Sum: {sum(counts):,} papers\n(Matches topic total: ✓)',
+            transform=ax.transAxes, ha='right', va='top',
+            fontsize=9, fontweight='bold',
+            bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='black'))
+    
+    plt.tight_layout()
+    return fig
+
+def create_topic_yearly_citations(topic: str, data: Dict, years: List[int]):
+    """
+    4.3.2. Отдельные гистограммы числа всех цитирований всех публикаций Sub-topic по годам с color-map
+    """
+    if data['total'] == 0 or not data.get('yearly_citations'):
+        return None
+    
+    _, gradient_palette = get_current_palettes()
+    
+    years_sorted = sorted(years)
+    citations = [data['yearly_citations'].get(year, 0) for year in years_sorted]
+    
+    if sum(citations) == 0:
+        return None
+    
+    fig, ax = plt.subplots(figsize=(12, 6))
+    
+    # Create color gradient based on citation counts
+    norm = plt.Normalize(min(citations) if min(citations) > 0 else 0, max(citations))
+    colors = gradient_palette(norm(citations))
+    
+    bars = ax.bar(years_sorted, citations, color=colors, edgecolor='black', linewidth=0.5, width=0.8)
+    
+    # Customize plot
+    ax.set_xlabel('Publication Year', fontsize=11, fontweight='bold')
+    ax.set_ylabel('Total Citations', fontsize=11, fontweight='bold')
+    ax.set_title(f'{topic}: Total Citations by Year\nTotal citations: {sum(citations):,}', 
+                fontsize=12, fontweight='bold', pad=10)
+    
+    ax.set_xticks(years_sorted)
+    ax.set_xticklabels([str(y) for y in years_sorted], rotation=45, ha='right')
+    
+    # Add value labels on bars
+    for bar, cit in zip(bars, citations):
+        if cit > 0:
+            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height(),
+                   f'{cit:,}', ha='center', va='bottom', fontsize=8, fontweight='bold', rotation=90)
+    
+    # Add colorbar
+    sm = plt.cm.ScalarMappable(cmap=gradient_palette, norm=norm)
+    sm.set_array([])
+    cbar = plt.colorbar(sm, ax=ax, pad=0.02)
+    cbar.set_label('Citation Intensity', fontsize=9)
+    
+    plt.tight_layout()
+    return fig
+
+def create_topic_citation_distribution(topic: str, data: Dict):
+    """
+    4.3.3. Отдельные гистограммы распределения цитирований публикаций каждого конкретного Sub-topic
+    по диапазонам с colormap: 0, 1-4, 5-10, 11-30, 31-50, 51-100, 100+
+    """
+    if data['total'] == 0 or not data.get('citation_distribution'):
+        return None
+    
+    _, gradient_palette = get_current_palettes()
+    
+    # Get citation distribution (should already have the 7 categories)
+    dist = data['citation_distribution']
+    categories = ['0', '1-4', '5-10', '11-30', '31-50', '51-100', '100+']
+    
+    # Ensure all categories exist
+    counts = [dist.get(cat, 0) for cat in categories]
+    total = sum(counts)
+    
+    if total == 0:
+        return None
+    
+    percentages = [c / total * 100 for c in counts]
+    
+    fig, ax = plt.subplots(figsize=(12, 6))
+    
+    # Create color gradient based on citation impact (higher categories get warmer colors)
+    norm = plt.Normalize(0, len(categories)-1)
+    colors = gradient_palette(norm(range(len(categories))))
+    
+    bars = ax.bar(categories, counts, color=colors, edgecolor='black', linewidth=0.5)
+    
+    # Customize plot
+    ax.set_xlabel('Citation Range', fontsize=11, fontweight='bold')
+    ax.set_ylabel('Number of Papers', fontsize=11, fontweight='bold')
+    ax.set_title(f'{topic}: Citation Distribution\nTotal papers: {total:,}', 
+                fontsize=12, fontweight='bold', pad=10)
+    
+    # Add value and percentage labels on bars
+    for bar, count, pct in zip(bars, counts, percentages):
+        if count > 0:
+            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height(),
+                   f'{count:,}\n({pct:.1f}%)', ha='center', va='bottom', fontsize=8, fontweight='bold')
+    
+    # Add colorbar
+    sm = plt.cm.ScalarMappable(cmap=gradient_palette, norm=norm)
+    sm.set_array([])
+    cbar = plt.colorbar(sm, ax=ax, pad=0.02)
+    cbar.set_label('Citation Impact →', fontsize=9)
+    cbar.set_ticks([])
+    
+    plt.tight_layout()
+    return fig
+
+def create_top_journals_bar(journal_data: Dict, top_n: int = 15):
+    """
+    4.4.1. Линейчатые гистограммы топ-журналов по всем публикациям
+    """
+    if not journal_data:
+        return None
+    
+    discrete_palette, _ = get_current_palettes()
+    
+    # Sort by total papers and get top N
+    sorted_journals = sorted(journal_data.items(), key=lambda x: x[1]['total_papers'], reverse=True)[:top_n]
+    
+    journals = [j[0] for j in sorted_journals]
+    papers = [j[1]['total_papers'] for j in sorted_journals]
+    
+    # Truncate long journal names
+    journals = [j[:40] + '...' if len(j) > 40 else j for j in journals]
+    
+    fig, ax = plt.subplots(figsize=(12, max(6, len(journals) * 0.4)))
+    
+    # Create horizontal bars
+    y_pos = np.arange(len(journals))
+    colors = discrete_palette[:len(journals)] if len(journals) <= len(discrete_palette) else plt.cm.tab20(np.linspace(0, 1, len(journals)))
+    
+    bars = ax.barh(y_pos, papers, color=colors, edgecolor='black', linewidth=0.5)
+    
+    # Customize plot
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(journals, fontsize=8)
+    ax.set_xlabel('Number of Publications', fontsize=11, fontweight='bold')
+    ax.set_title(f'Top {top_n} Journals by Publication Count\nTotal journals analyzed: {len(journal_data)}', 
+                fontsize=12, fontweight='bold', pad=10)
+    
+    # Add value labels
+    for bar, paper in zip(bars, papers):
+        ax.text(paper + max(papers)*0.01, bar.get_y() + bar.get_height()/2,
+                f'{paper:,}', va='center', fontsize=9, fontweight='bold')
+    
+    plt.tight_layout()
+    return fig
+
+def create_top_journals_stacked(journal_data: Dict, topics: List[str], top_n: int = 15):
+    """
+    4.4.2. Линейчатые гистограммы с накоплением по Sub-topics
+    """
+    if not journal_data or not topics:
+        return None
+    
+    discrete_palette, _ = get_current_palettes()
+    
+    # Sort by total papers and get top N
+    sorted_journals = sorted(journal_data.items(), key=lambda x: x[1]['total_papers'], reverse=True)[:top_n]
+    
+    journals = [j[0] for j in sorted_journals]
+    journals_short = [j[:30] + '...' if len(j) > 30 else j for j in journals]
+    
+    # Prepare stacked data
+    topic_data = []
+    for topic in topics:
+        topic_counts = []
+        for journal, data in sorted_journals:
+            topic_counts.append(data['topics'].get(topic, 0))
+        topic_data.append(topic_counts)
+    
+    fig, ax = plt.subplots(figsize=(14, max(6, len(journals) * 0.4)))
+    
+    # Create stacked horizontal bars
+    y_pos = np.arange(len(journals))
+    left = np.zeros(len(journals))
+    
+    colors = discrete_palette[:len(topics)] if len(topics) <= len(discrete_palette) else plt.cm.tab20(np.linspace(0, 1, len(topics)))
+    
+    for idx, (topic, counts) in enumerate(zip(topics, topic_data)):
+        bars = ax.barh(y_pos, counts, left=left, label=topic,
+                       color=colors[idx], edgecolor='black', linewidth=0.5)
+        left += np.array(counts)
+    
+    # Customize plot
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(journals_short, fontsize=8)
+    ax.set_xlabel('Number of Publications', fontsize=11, fontweight='bold')
+    ax.set_title(f'Top {top_n} Journals - Distribution by Sub-topic', 
+                fontsize=12, fontweight='bold', pad=10)
+    
+    # Add legend
+    ax.legend(fontsize=9, frameon=True, edgecolor='black', loc='upper left', bbox_to_anchor=(1, 1))
+    
+    plt.tight_layout()
+    return fig
+
+def create_top_journals_citations(journal_data: Dict, top_n: int = 15):
+    """
+    4.4.3. Среднее цитирование топ-журнала по найденным публикациям
+    """
+    if not journal_data:
+        return None
+    
+    discrete_palette, _ = get_current_palettes()
+    
+    # Filter journals with at least one paper and calculate average citations
+    journal_stats = []
+    for journal, data in journal_data.items():
+        if data['total_papers'] > 0 and data['citations']:
+            avg_cit = np.mean(data['citations'])
+            journal_stats.append((journal, avg_cit, data['total_papers']))
+    
+    # Sort by average citations and get top N
+    journal_stats.sort(key=lambda x: x[1], reverse=True)
+    journal_stats = journal_stats[:top_n]
+    
+    journals = [j[0] for j in journal_stats]
+    avg_cits = [j[1] for j in journal_stats]
+    papers = [j[2] for j in journal_stats]
+    
+    # Truncate long journal names
+    journals = [j[:40] + '...' if len(j) > 40 else j for j in journals]
+    
+    fig, ax = plt.subplots(figsize=(12, max(6, len(journals) * 0.4)))
+    
+    # Create horizontal bars
+    y_pos = np.arange(len(journals))
+    colors = discrete_palette[:len(journals)] if len(journals) <= len(discrete_palette) else plt.cm.viridis(np.linspace(0.2, 0.9, len(journals)))
+    
+    bars = ax.barh(y_pos, avg_cits, color=colors, edgecolor='black', linewidth=0.5)
+    
+    # Customize plot
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(journals, fontsize=8)
+    ax.set_xlabel('Average Citations per Paper', fontsize=11, fontweight='bold')
+    ax.set_title(f'Top {top_n} Journals by Average Citations\n(Number of papers in parentheses)', 
+                fontsize=12, fontweight='bold', pad=10)
+    
+    # Add value labels with paper count
+    for bar, avg, paper in zip(bars, avg_cits, papers):
+        ax.text(avg + max(avg_cits)*0.02, bar.get_y() + bar.get_height()/2,
+                f'{avg:.1f} (n={paper})', va='center', fontsize=9, fontweight='bold')
+    
+    plt.tight_layout()
+    return fig
+
+def create_citation_velocity_chart(consistent_data: Dict[str, Dict], current_year: int = None):
+    """
+    4.5. Citation Velocity (Citations per Year) для каждого Sub-topics с color-map и средними значениями
+    """
+    if current_year is None:
+        current_year = datetime.now().year
+    
+    topics = []
+    velocities = []
+    total_citations = []
+    
+    for topic, data in consistent_data.items():
+        if data['citation_stats'] and 'mean_velocity' in data['citation_stats']:
+            topics.append(topic)
+            velocities.append(data['citation_stats']['mean_velocity'])
+            total_citations.append(data['citation_stats'].get('total_citations', 0))
+    
+    if not topics:
+        return None
+    
+    # Sort by velocity
+    sorted_data = sorted(zip(topics, velocities, total_citations), key=lambda x: x[1], reverse=True)
+    topics = [x[0] for x in sorted_data]
+    velocities = [x[1] for x in sorted_data]
+    total_citations = [x[2] for x in sorted_data]
+    
+    fig, ax = plt.subplots(figsize=(12, max(6, len(topics) * 0.4)))
+    
+    # Create color gradient based on velocity
+    norm = plt.Normalize(min(velocities), max(velocities))
+    _, gradient_palette = get_current_palettes()
+    colors = gradient_palette(norm(velocities))
+    
+    # Create horizontal bars
+    y_pos = np.arange(len(topics))
+    bars = ax.barh(y_pos, velocities, color=colors, edgecolor='black', linewidth=0.5)
+    
+    # Add average line
+    avg_velocity = np.mean(velocities)
+    ax.axvline(avg_velocity, color='red', linestyle='--', linewidth=2,
+               label=f'Average: {avg_velocity:.2f} cit/year')
+    
+    # Customize plot
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(topics, fontsize=9)
+    ax.set_xlabel('Mean Citations per Year', fontsize=11, fontweight='bold')
+    ax.set_title('Citation Velocity by Sub-topic\n(Higher values indicate "hotter" research areas)',
+                fontsize=12, fontweight='bold', pad=10)
+    
+    # Add value labels
+    for bar, vel, cit in zip(bars, velocities, total_citations):
+        ax.text(vel + max(velocities)*0.02, bar.get_y() + bar.get_height()/2,
+                f'{vel:.2f} (total: {cit:,})', va='center', fontsize=9, fontweight='bold')
+    
+    # Add legend
+    ax.legend(fontsize=9, frameon=True, edgecolor='black')
+    
+    # Add colorbar
+    sm = plt.cm.ScalarMappable(cmap=gradient_palette, norm=norm)
+    sm.set_array([])
+    cbar = plt.colorbar(sm, ax=ax, pad=0.02)
+    cbar.set_label('Citation Velocity', fontsize=9)
+    
+    plt.tight_layout()
+    return fig
+
+def create_matthew_effect_analysis(consistent_data: Dict[str, Dict]):
+    """
+    Дополнительный график 1: "Matthew Effect" Analysis
+    Соотношение доли статей и доли цитирований
+    """
+    all_citations = []
+    for topic, data in consistent_data.items():
+        for work in data['top_works']:
+            all_citations.append(work.get('cited_by_count', 0))
+    
+    if not all_citations:
+        return None
+    
+    all_citations = np.sort(all_citations)[::-1]  # Sort descending
+    n = len(all_citations)
+    total_citations = sum(all_citations)
+    
+    # Calculate cumulative shares
+    cum_papers = np.arange(1, n + 1) / n * 100
+    cum_citations = np.cumsum(all_citations) / total_citations * 100
+    
+    # Find key percentiles
+    percentiles = [1, 5, 10, 20, 50]
+    percentile_indices = [int(p * n / 100) - 1 for p in percentiles]
+    citation_shares = [cum_citations[i] for i in percentile_indices]
+    
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+    
+    # Plot 1: Cumulative distribution
+    ax1.plot(cum_papers, cum_citations, 'b-', linewidth=2, label='Actual distribution')
+    ax1.plot([0, 100], [0, 100], 'k--', linewidth=1, label='Perfect equality')
+    ax1.fill_between(cum_papers, cum_papers, cum_citations, alpha=0.2, color='gray')
+    
+    # Mark key percentiles
+    for p, share in zip(percentiles, citation_shares):
+        ax1.plot(p, share, 'ro', markersize=6)
+        ax1.annotate(f'{p}% papers\n{share:.1f}% citations',
+                    (p, share), xytext=(5, 5), textcoords='offset points',
+                    fontsize=8, bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+    
+    ax1.set_xlabel('Cumulative share of papers (%)', fontsize=11, fontweight='bold')
+    ax1.set_ylabel('Cumulative share of citations (%)', fontsize=11, fontweight='bold')
+    ax1.set_title('Matthew Effect Analysis\nConcentration of Citations', fontsize=12, fontweight='bold')
+    ax1.legend(fontsize=9)
+    ax1.grid(True, alpha=0.3, linestyle='--')
+    
+    # Plot 2: Bar chart of top percentile shares
+    ax2.bar([f'Top {p}%' for p in percentiles], citation_shares,
+            color=plt.cm.Reds(np.linspace(0.4, 0.9, len(percentiles))),
+            edgecolor='black', linewidth=0.5)
+    
+    for i, (p, share) in enumerate(zip(percentiles, citation_shares)):
+        ax2.text(i, share + 2, f'{share:.1f}%', ha='center', va='bottom', fontsize=9, fontweight='bold')
+    
+    ax2.set_ylabel('Share of total citations (%)', fontsize=11, fontweight='bold')
+    ax2.set_title('Citation Concentration in Top Papers', fontsize=12, fontweight='bold')
+    ax2.set_ylim(0, 105)
+    ax2.grid(True, alpha=0.3, linestyle='--', axis='y')
+    
+    plt.suptitle(f'Analysis of Bibliometric Matthew Effect\nTotal papers: {n:,}, Total citations: {total_citations:,}',
+                fontsize=12, fontweight='bold')
+    plt.tight_layout()
+    return fig
+
+def create_citation_half_life(consistent_data: Dict[str, Dict], current_year: int = None):
+    """
+    Дополнительный график 2: Citation Half-Life
+    Медианный возраст цитируемых статей
+    """
+    if current_year is None:
+        current_year = datetime.now().year
+    
+    topics = []
+    half_lives = []
+    
+    for topic, data in consistent_data.items():
+        if data['top_works']:
+            ages = []
+            for work in data['top_works']:
+                pub_year = work.get('publication_year', current_year)
+                age = current_year - pub_year
+                citations = work.get('cited_by_count', 0)
+                # Weight by citations for citation half-life
+                ages.extend([age] * citations)
+            
+            if ages:
+                half_life = np.median(ages)
+                topics.append(topic)
+                half_lives.append(half_life)
+    
+    if not topics:
+        return None
+    
+    # Sort by half-life
+    sorted_data = sorted(zip(topics, half_lives), key=lambda x: x[1])
+    topics = [x[0] for x in sorted_data]
+    half_lives = [x[1] for x in sorted_data]
+    
+    fig, ax = plt.subplots(figsize=(12, max(6, len(topics) * 0.4)))
+    
+    # Create horizontal bars
+    y_pos = np.arange(len(topics))
+    colors = plt.cm.viridis(np.linspace(0.2, 0.9, len(topics)))
+    
+    bars = ax.barh(y_pos, half_lives, color=colors, edgecolor='black', linewidth=0.5)
+    
+    # Add average line
+    avg_half_life = np.mean(half_lives)
+    ax.axvline(avg_half_life, color='red', linestyle='--', linewidth=2,
+               label=f'Average: {avg_half_life:.1f} years')
+    
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(topics, fontsize=9)
+    ax.set_xlabel('Median Age of Cited Papers (years)', fontsize=11, fontweight='bold')
+    ax.set_title('Citation Half-Life Analysis\n(Longer bars indicate slower knowledge obsolescence)',
+                fontsize=12, fontweight='bold', pad=10)
+    
+    # Add value labels
+    for bar, hl in zip(bars, half_lives):
+        ax.text(hl + 0.5, bar.get_y() + bar.get_height()/2,
+                f'{hl:.1f} years', va='center', fontsize=9, fontweight='bold')
+    
+    ax.legend(fontsize=9)
+    plt.tight_layout()
+    return fig
+
+def create_collaboration_intensity(consistent_data: Dict[str, Dict], years: List[int]):
+    """
+    Дополнительный график 3: Collaboration Network Intensity
+    Среднее число авторов на статью по годам
+    """
+    if not consistent_data:
+        return None
+    
+    years_sorted = sorted(years)
+    
+    # Collect average authors per year across all topics
+    yearly_authors = defaultdict(list)
+    yearly_papers = defaultdict(int)
+    
+    for topic, data in consistent_data.items():
+        for work in data['top_works']:
+            year = work.get('publication_year')
+            if year in years_sorted:
+                enriched = enrich_work_data(work)
+                n_authors = len(enriched.get('authors', []))
+                if n_authors > 0:
+                    yearly_authors[year].append(n_authors)
+                yearly_papers[year] += 1
+    
+    if not yearly_authors:
+        return None
+    
+    # Calculate averages
+    years_with_data = sorted([y for y in years_sorted if y in yearly_authors])
+    avg_authors = [np.mean(yearly_authors[y]) for y in years_with_data]
+    paper_counts = [yearly_papers[y] for y in years_with_data]
+    
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+    
+    # Plot 1: Average authors over time
+    ax1.plot(years_with_data, avg_authors, 'b-o', linewidth=2, markersize=6,
+             markerfacecolor='white', markeredgecolor='blue', markeredgewidth=1.5)
+    
+    # Add trend line
+    if len(years_with_data) > 1:
+        z = np.polyfit(years_with_data, avg_authors, 1)
+        p = np.poly1d(z)
+        ax1.plot(years_with_data, p(years_with_data), "r--", alpha=0.8, linewidth=1,
+                label=f'Trend (slope: {z[0]:.3f})')
+    
+    ax1.set_xlabel('Publication Year', fontsize=11, fontweight='bold')
+    ax1.set_ylabel('Average Number of Authors', fontsize=11, fontweight='bold')
+    ax1.set_title('Collaboration Intensity Over Time', fontsize=12, fontweight='bold')
+    ax1.set_xticks(years_with_data)
+    ax1.set_xticklabels([str(y) for y in years_with_data], rotation=45, ha='right')
+    ax1.grid(True, alpha=0.3, linestyle='--')
+    ax1.legend(fontsize=9)
+    
+    # Plot 2: Distribution by topic
+    topic_authors = []
+    topics = []
+    for topic, data in consistent_data.items():
+        authors_list = []
+        for work in data['top_works']:
+            enriched = enrich_work_data(work)
+            authors_list.append(len(enriched.get('authors', [])))
+        if authors_list:
+            topic_authors.append(np.mean(authors_list))
+            topics.append(topic)
+    
+    if topics:
+        y_pos = np.arange(len(topics))
+        colors = plt.cm.Paired(np.linspace(0, 1, len(topics)))
+        
+        bars = ax2.barh(y_pos, topic_authors, color=colors, edgecolor='black', linewidth=0.5)
+        ax2.set_yticks(y_pos)
+        ax2.set_yticklabels(topics, fontsize=8)
+        ax2.set_xlabel('Average Number of Authors', fontsize=11, fontweight='bold')
+        ax2.set_title('Collaboration Intensity by Topic', fontsize=12, fontweight='bold')
+        
+        # Add value labels
+        for bar, val in zip(bars, topic_authors):
+            ax2.text(val + 0.2, bar.get_y() + bar.get_height()/2,
+                    f'{val:.1f}', va='center', fontsize=9, fontweight='bold')
+    
+    plt.suptitle('Collaboration Network Analysis', fontsize=12, fontweight='bold')
+    plt.tight_layout()
+    return fig
+
+def create_journal_if_vs_citations(consistent_data: Dict[str, Dict]):
+    """
+    Дополнительный график 4: Journal Impact Factor vs Citation Performance
+    (Используем среднее цитирование как прокси, так как IF не доступен напрямую)
+    """
+    journal_stats = defaultdict(lambda: {'citations': [], 'papers': 0, 'topics': set()})
+    
+    for topic, data in consistent_data.items():
+        for work in data['top_works']:
+            enriched = enrich_work_data(work)
+            journal = enriched.get('journal', 'Unknown')
+            if journal != 'Unknown':
+                journal_stats[journal]['citations'].append(enriched.get('cited_by_count', 0))
+                journal_stats[journal]['papers'] += 1
+                journal_stats[journal]['topics'].add(topic)
+    
+    # Filter journals with at least 3 papers
+    journals = []
+    avg_cits = []
+    papers = []
+    topic_diversity = []
+    
+    for journal, stats in journal_stats.items():
+        if stats['papers'] >= 3:
+            journals.append(journal[:30] + '...' if len(journal) > 30 else journal)
+            avg_cits.append(np.mean(stats['citations']))
+            papers.append(stats['papers'])
+            topic_diversity.append(len(stats['topics']))
+    
+    if len(journals) < 5:
+        return None
+    
+    fig, ax = plt.subplots(figsize=(12, 8))
+    
+    # Create scatter plot
+    scatter = ax.scatter(papers, avg_cits, c=topic_diversity, s=np.array(papers)*20,
+                        cmap='viridis', alpha=0.7, edgecolor='black', linewidth=0.5)
+    
+    # Add journal labels for top ones
+    for i, (journal, paper, cit) in enumerate(zip(journals, papers, avg_cits)):
+        if paper > 5 or cit > 50:  # Label prominent journals
+            ax.annotate(journal, (paper, cit), xytext=(5, 5), textcoords='offset points',
+                       fontsize=7, bbox=dict(boxstyle='round', facecolor='white', alpha=0.7))
+    
+    ax.set_xlabel('Number of Papers in Sample', fontsize=11, fontweight='bold')
+    ax.set_ylabel('Average Citations per Paper', fontsize=11, fontweight='bold')
+    ax.set_title('Journal Impact Analysis\nSize → paper count, Color → topic diversity',
+                fontsize=12, fontweight='bold')
+    
+    # Add colorbar
+    cbar = plt.colorbar(scatter, ax=ax)
+    cbar.set_label('Number of Topics Covered', fontsize=9)
+    
+    # Add trend line
+    if len(papers) > 1:
+        z = np.polyfit(papers, avg_cits, 1)
+        p = np.poly1d(z)
+        ax.plot(sorted(papers), p(sorted(papers)), "r--", alpha=0.5, linewidth=1,
+               label=f'Trend line')
+    
+    ax.legend(fontsize=9)
+    ax.grid(True, alpha=0.3, linestyle='--')
+    
+    plt.tight_layout()
+    return fig
+
+def create_research_front_velocity(consistent_data: Dict[str, Dict], current_year: int = None):
+    """
+    Дополнительный график 5: Research Front Velocity
+    Соотношение "горячих" статей (последние 2 года) к общему числу публикаций
+    """
+    if current_year is None:
+        current_year = datetime.now().year
+    
+    recent_years = [current_year - 1, current_year - 2]
+    
+    topics = []
+    hot_paper_shares = []
+    total_papers_list = []
+    
+    for topic, data in consistent_data.items():
+        if data['total'] > 0:
+            total = data['total']
+            # Count papers from last 2 years
+            hot_papers = sum(data['yearly'].get(year, 0) for year in recent_years if year in data['yearly'])
+            hot_share = (hot_papers / total) * 100 if total > 0 else 0
+            
+            topics.append(topic)
+            hot_paper_shares.append(hot_share)
+            total_papers_list.append(total)
+    
+    if not topics:
+        return None
+    
+    # Sort by hot paper share
+    sorted_data = sorted(zip(topics, hot_paper_shares, total_papers_list), key=lambda x: x[1], reverse=True)
+    topics = [x[0] for x in sorted_data]
+    hot_shares = [x[1] for x in sorted_data]
+    totals = [x[2] for x in sorted_data]
+    
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+    
+    # Plot 1: Hot paper shares
+    y_pos = np.arange(len(topics))
+    colors = plt.cm.RdYlGn(np.linspace(0.2, 0.9, len(topics)))
+    
+    bars = ax1.barh(y_pos, hot_shares, color=colors, edgecolor='black', linewidth=0.5)
+    
+    ax1.set_yticks(y_pos)
+    ax1.set_yticklabels(topics, fontsize=9)
+    ax1.set_xlabel('Share of papers from last 2 years (%)', fontsize=11, fontweight='bold')
+    ax1.set_title(f'Research Front Velocity\n(Share of "hot" papers: {recent_years[0]}-{recent_years[1]})',
+                 fontsize=12, fontweight='bold')
+    
+    # Add value labels
+    for bar, share, total in zip(bars, hot_shares, totals):
+        ax1.text(share + 1, bar.get_y() + bar.get_height()/2,
+                f'{share:.1f}% (n={total})', va='center', fontsize=8, fontweight='bold')
+    
+    # Plot 2: Time trend of hot paper percentage
+    # Calculate yearly hot paper percentage
+    years_sorted = sorted(set().union(*[set(data['yearly'].keys()) for data in consistent_data.values()]))
+    years_sorted = [y for y in years_sorted if y <= current_year]
+    
+    if len(years_sorted) >= 3:
+        yearly_hot_pct = []
+        for year in years_sorted:
+            # For each year, calculate what percentage of papers from that year are "hot" (i.e., recent)
+            # This is a simplification - we're looking at the age distribution
+            total_papers_year = sum(data['yearly'].get(year, 0) for data in consistent_data.values())
+            if total_papers_year > 0:
+                yearly_hot_pct.append(100)  # All papers were hot when published
+            else:
+                yearly_hot_pct.append(0)
+        
+        ax2.plot(years_sorted, yearly_hot_pct, 'b-o', linewidth=2, markersize=6)
+        ax2.set_xlabel('Publication Year', fontsize=11, fontweight='bold')
+        ax2.set_ylabel('Papers from this year (% of total)', fontsize=11, fontweight='bold')
+        ax2.set_title('Publication Activity Over Time', fontsize=12, fontweight='bold')
+        ax2.set_xticks(years_sorted)
+        ax2.set_xticklabels([str(y) for y in years_sorted], rotation=45, ha='right')
+        ax2.grid(True, alpha=0.3, linestyle='--')
+    
+    plt.suptitle('Research Front Velocity Analysis\nIdentifying Emerging Research Areas',
+                fontsize=12, fontweight='bold')
+    plt.tight_layout()
+    return fig
+
 def create_lorenz_curve(all_works_by_topic: Dict[str, List[Dict]], title: str = "Citation Inequality (Lorenz Curve)"):
-    """
-    Create Lorenz curve showing citation inequality across all topics combined
-    """
+    """Create Lorenz curve showing citation inequality across all topics combined"""
     # Collect all citations from all topics
     all_citations = []
     for topic, works in all_works_by_topic.items():
@@ -1260,688 +2365,7 @@ def create_lorenz_curve(all_works_by_topic: Dict[str, List[Dict]], title: str = 
     
     ax.text(0.05, 0.95, f"Interpretation: {interpretation}\nTotal papers: {n:,}\nTotal citations: {total_citations:,}", 
             transform=ax.transAxes, fontsize=8, verticalalignment='top',
-            bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
-    
-    plt.tight_layout()
-    return fig
-
-def create_lorenz_curve(all_works_by_topic: Dict[str, List[Dict]], title: str = "Citation Inequality (Lorenz Curve)"):
-    """Create Lorenz curve showing citation inequality with publication colors"""
-    # Collect all citations from all topics
-    all_citations = []
-    for topic, works in all_works_by_topic.items():
-        for work in works:
-            all_citations.append(work.get('cited_by_count', 0))
-    
-    if not all_citations:
-        return None
-    
-    # Sort citations
-    all_citations = np.sort(all_citations)
-    n = len(all_citations)
-    
-    # Calculate cumulative shares
-    cum_citations = np.cumsum(all_citations)
-    total_citations = cum_citations[-1] if cum_citations[-1] > 0 else 1
-    
-    # Population shares (x-axis)
-    population_share = np.arange(1, n + 1) / n
-    
-    # Citation shares (y-axis)
-    citation_share = cum_citations / total_citations
-    
-    # Calculate Gini coefficient for all papers combined
-    gini_all = calculate_gini_coefficient(all_citations)
-    
-    # Create figure
-    fig, ax = plt.subplots(figsize=(8, 8))
-    
-    # Apply scientific style
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax.spines['bottom'].set_linewidth(1.0)
-    ax.spines['left'].set_linewidth(1.0)
-    ax.tick_params(axis='both', which='major', labelsize=9)
-    
-    # Plot Lorenz curve with gradient
-    points = np.array([population_share, citation_share]).T.reshape(-1, 1, 2)
-    segments = np.concatenate([points[:-1], points[1:]], axis=1)
-    
-    # Create gradient along the curve
-    norm = plt.Normalize(0, len(segments))
-    lc = LineCollection(segments, cmap='viridis', norm=norm,
-                       linewidth=2.5, alpha=0.8)
-    lc.set_array(np.arange(len(segments)))
-    ax.add_collection(lc)
-    
-    # Plot equality line
-    ax.plot([0, 1], [0, 1], 'k--', linewidth=1.5, label='Perfect equality', alpha=0.7)
-    
-    # Fill area between curves with transparent gradient
-    ax.fill_between(population_share, population_share, citation_share, 
-                    alpha=0.2, color='gray', label=f'Gini = {gini_all:.3f}')
-    
-    ax.set_xlabel('Cumulative share of papers (from least to most cited)', fontsize=10, fontweight='bold')
-    ax.set_ylabel('Cumulative share of citations', fontsize=10, fontweight='bold')
-    ax.set_title(title, fontsize=11, fontweight='bold', pad=10)
-    ax.set_xlim(0, 1)
-    ax.set_ylim(0, 1)
-    ax.legend(fontsize=9, frameon=True, edgecolor='black')
-    ax.grid(True, alpha=0.2, linestyle='--', color='gray')
-    
-    # Add colorbar
-    sm = plt.cm.ScalarMappable(cmap='viridis', norm=plt.Normalize(0, len(segments)))
-    sm.set_array([])
-    cbar = plt.colorbar(sm, ax=ax, pad=0.02)
-    cbar.set_label('Cumulative position', fontsize=9)
-    
-    # Add text box with interpretation
-    if gini_all > 0.6:
-        interpretation = "Very high inequality (Matthew effect)"
-        color = '#E74C3C'
-    elif gini_all > 0.4:
-        interpretation = "High inequality"
-        color = '#F39C12'
-    elif gini_all > 0.2:
-        interpretation = "Moderate inequality"
-        color = '#F1C40F'
-    else:
-        interpretation = "Low inequality"
-        color = '#27AE60'
-    
-    ax.text(0.05, 0.95, f"Interpretation: {interpretation}\nTotal papers: {n:,}\nTotal citations: {total_citations:,}", 
-            transform=ax.transAxes, fontsize=8, verticalalignment='top',
-            bbox=dict(boxstyle='round', facecolor=color, alpha=0.2, edgecolor=color))
-    
-    plt.tight_layout()
-    return fig
-
-def create_top_journals_chart(all_works_by_topic: Dict[str, List[Dict]], top_n: int = 10):
-    """Create chart showing top journals with publication colors"""
-    # Collect journal data
-    journal_data = defaultdict(lambda: {'count': 0, 'citations': [], 'topics': set()})
-    
-    for topic, works in all_works_by_topic.items():
-        for work in works:
-            enriched = enrich_work_data(work)
-            journal = enriched.get('journal', 'Unknown Journal')
-            if journal and journal != 'Unknown Journal':
-                journal_data[journal]['count'] += 1
-                journal_data[journal]['citations'].append(enriched.get('cited_by_count', 0))
-                journal_data[journal]['topics'].add(topic)
-    
-    if not journal_data:
-        return None
-    
-    # Sort by publication count and get top N
-    top_journals = sorted(journal_data.items(), key=lambda x: x[1]['count'], reverse=True)[:top_n]
-    
-    # Prepare data for plotting
-    journals = [j[0] for j in top_journals]
-    counts = [j[1]['count'] for j in top_journals]
-    avg_citations = [np.mean(j[1]['citations']) if j[1]['citations'] else 0 for j in top_journals]
-    topic_counts = [len(j[1]['topics']) for j in top_journals]
-    
-    # Create figure with two subplots
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
-    
-    # Apply scientific style
-    for ax in [ax1, ax2]:
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        ax.spines['bottom'].set_linewidth(1.0)
-        ax.spines['left'].set_linewidth(1.0)
-        ax.tick_params(axis='both', which='major', labelsize=9)
-    
-    # Plot 1: Publication counts
-    y_pos = np.arange(len(journals))
-    colors1 = plt.cm.Blues(np.linspace(0.4, 0.9, len(journals)))
-    bars1 = ax1.barh(y_pos, counts, color=colors1, edgecolor='black', linewidth=0.5)
-    ax1.set_yticks(y_pos)
-    ax1.set_yticklabels(journals, fontsize=8)
-    ax1.set_xlabel('Number of Publications', fontsize=10, fontweight='bold')
-    ax1.set_title('A) Top Journals by Publication Count', fontsize=11, fontweight='bold', pad=10)
-    
-    # Add values to bars
-    for i, (bar, count, topics) in enumerate(zip(bars1, counts, topic_counts)):
-        ax1.text(count + max(counts)*0.01, bar.get_y() + bar.get_height()/2, 
-                f'{count} ({topics} topics)', va='center', fontsize=7,
-                bbox=dict(boxstyle='round', facecolor='white', alpha=0.7, edgecolor='none'))
-    
-    # Plot 2: Average citations
-    colors2 = plt.cm.OrRd(np.linspace(0.3, 0.9, len(journals)))
-    bars2 = ax2.barh(y_pos, avg_citations, color=colors2, edgecolor='black', linewidth=0.5)
-    ax2.set_yticks(y_pos)
-    ax2.set_yticklabels([])
-    ax2.set_xlabel('Average Citations per Paper', fontsize=10, fontweight='bold')
-    ax2.set_title('B) Average Citations by Journal', fontsize=11, fontweight='bold', pad=10)
-    
-    # Add values to bars
-    for i, (bar, avg_cit) in enumerate(zip(bars2, avg_citations)):
-        ax2.text(avg_cit + max(avg_citations)*0.01, bar.get_y() + bar.get_height()/2, 
-                f'{avg_cit:.1f}', va='center', fontsize=8,
-                bbox=dict(boxstyle='round', facecolor='white', alpha=0.7, edgecolor='none'))
-    
-    plt.suptitle(f'Top {top_n} Journals Analysis', fontsize=12, fontweight='bold', y=1.02)
-    plt.tight_layout()
-    
-    return fig
-    
-def create_citation_velocity_chart(consistent_data: Dict[str, Dict], current_year: int = None):
-    """Create chart showing citation velocity with gradient colors"""
-    if current_year is None:
-        current_year = datetime.now().year
-    
-    topics = []
-    velocities = []
-    errors = []
-    
-    for topic, data in consistent_data.items():
-        if data['citation_stats'] and 'mean_velocity' in data['citation_stats']:
-            topics.append(topic)
-            velocities.append(data['citation_stats']['mean_velocity'])
-            errors.append(data['citation_stats'].get('mean_velocity', 0) * 0.2)
-    
-    if not topics:
-        return None
-    
-    # Sort by velocity
-    sorted_data = sorted(zip(topics, velocities, errors), key=lambda x: x[1], reverse=True)
-    topics = [x[0] for x in sorted_data]
-    velocities = [x[1] for x in sorted_data]
-    errors = [x[2] for x in sorted_data]
-    
-    fig, ax = plt.subplots(figsize=(10, 6))
-    
-    # Apply scientific style
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax.spines['bottom'].set_linewidth(1.0)
-    ax.spines['left'].set_linewidth(1.0)
-    ax.tick_params(axis='both', which='major', labelsize=9)
-    
-    # Create gradient colors based on velocity
-    norm = plt.Normalize(min(velocities), max(velocities))
-    colors = plt.cm.RdYlGn(norm(velocities))  # Red (low) to Green (high)
-    
-    # Create bar chart with error bars
-    x_pos = np.arange(len(topics))
-    bars = ax.bar(x_pos, velocities, yerr=errors, capsize=5, 
-                  color=colors, edgecolor='black', linewidth=0.5, 
-                  error_kw={'ecolor': 'black', 'linewidth': 1, 'capsize': 3})
-    
-    ax.set_xticks(x_pos)
-    ax.set_xticklabels(topics, rotation=45, ha='right', fontsize=9)
-    ax.set_xlabel('Research Topic', fontsize=10, fontweight='bold')
-    ax.set_ylabel('Mean Citations per Year', fontsize=10, fontweight='bold')
-    ax.set_title('Citation Velocity by Topic\n(Higher values indicate "hotter" research areas)', 
-                 fontsize=11, fontweight='bold', pad=10)
-    
-    # Add values on bars
-    for i, (bar, vel) in enumerate(zip(bars, velocities)):
-        ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max(velocities)*0.02,
-                f'{vel:.2f}', ha='center', va='bottom', fontsize=8, fontweight='bold',
-                bbox=dict(boxstyle='round', facecolor='white', alpha=0.7, edgecolor='none'))
-    
-    # Add reference line for average
-    avg_velocity = np.mean(velocities)
-    ax.axhline(avg_velocity, color='black', linestyle='--', linewidth=1.5, 
-               label=f'Average: {avg_velocity:.2f}')
-    
-    # Add colorbar
-    sm = plt.cm.ScalarMappable(cmap='RdYlGn', norm=norm)
-    sm.set_array([])
-    cbar = plt.colorbar(sm, ax=ax, pad=0.02)
-    cbar.set_label('Velocity (citations/year)', fontsize=9)
-    
-    ax.legend(fontsize=8, frameon=True, edgecolor='black', loc='upper right')
-    
-    plt.tight_layout()
-    return fig
-
-def create_highly_cited_share_chart(consistent_data: Dict[str, Dict], threshold: int = 50):
-    """
-    Create chart showing share of highly-cited papers (>threshold citations) by topic
-    """
-    topics = []
-    shares = []
-    counts = []
-    
-    for topic, data in consistent_data.items():
-        if data['citation_stats']:
-            total_papers = len(data['top_works'])
-            if total_papers > 0:
-                highly_cited = data['citation_stats'].get(f'highly_cited_{threshold}', 0)
-                share = (highly_cited / total_papers) * 100
-                topics.append(topic)
-                shares.append(share)
-                counts.append(highly_cited)
-    
-    if not topics:
-        return None
-    
-    # Sort by share
-    sorted_data = sorted(zip(topics, shares, counts), key=lambda x: x[1], reverse=True)
-    topics = [x[0] for x in sorted_data]
-    shares = [x[1] for x in sorted_data]
-    counts = [x[2] for x in sorted_data]
-    
-    fig, ax = plt.subplots(figsize=(10, 6))
-    
-    # Apply scientific style
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax.spines['bottom'].set_linewidth(1.0)
-    ax.spines['left'].set_linewidth(1.0)
-    ax.tick_params(axis='both', which='major', labelsize=9)
-    
-    # Create horizontal bar chart
-    y_pos = np.arange(len(topics))
-    bars = ax.barh(y_pos, shares, color='gray', edgecolor='black', linewidth=0.5)
-    
-    ax.set_yticks(y_pos)
-    ax.set_yticklabels(topics, fontsize=9)
-    ax.set_xlabel(f'Percentage of Papers with >{threshold} Citations (%)', fontsize=10, fontweight='bold')
-    ax.set_ylabel('Research Topic', fontsize=10, fontweight='bold')
-    ax.set_title(f'Share of Highly-Cited Papers (>{threshold} citations) by Topic', 
-                 fontsize=11, fontweight='bold', pad=10)
-    
-    # Add values to bars
-    for i, (bar, share, count) in enumerate(zip(bars, shares, counts)):
-        ax.text(share + max(shares)*0.01, bar.get_y() + bar.get_height()/2,
-                f'{share:.1f}% ({count})', va='center', fontsize=8)
-    
-    plt.tight_layout()
-    return fig
-
-def create_relevance_vs_citations_scatter(consistent_data: Dict[str, Dict]):
-    """
-    Create scatter plot of relevance score vs citation count for all papers
-    """
-    all_data = []
-    for topic, data in consistent_data.items():
-        for work in data['top_works']:
-            enriched = enrich_work_data(work)
-            all_data.append({
-                'topic': topic,
-                'relevance': enriched.get('relevance_score', 0),
-                'citations': enriched.get('cited_by_count', 0),
-                'title': enriched.get('title', '')[:50]
-            })
-    
-    if not all_data:
-        return None
-    
-    df = pd.DataFrame(all_data)
-    
-    fig, ax = plt.subplots(figsize=(10, 8))
-    
-    # Apply scientific style
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax.spines['bottom'].set_linewidth(1.0)
-    ax.spines['left'].set_linewidth(1.0)
-    ax.tick_params(axis='both', which='major', labelsize=9)
-    
-    # Create scatter plot with different colors for topics
-    topics = df['topic'].unique()
-    colors = plt.cm.tab10(np.linspace(0, 1, len(topics)))
-    
-    for topic, color in zip(topics, colors):
-        topic_data = df[df['topic'] == topic]
-        ax.scatter(topic_data['relevance'], topic_data['citations'], 
-                  alpha=0.6, s=30, label=topic, color=color, edgecolor='black', linewidth=0.3)
-    
-    # Add trend line
-    z = np.polyfit(df['relevance'], df['citations'], 1)
-    p = np.poly1d(z)
-    ax.plot(df['relevance'], p(df['relevance']), "r--", alpha=0.8, linewidth=1, 
-            label=f'Trend (r² = {np.corrcoef(df["relevance"], df["citations"])[0,1]**2:.3f})')
-    
-    ax.set_xlabel('OpenAlex Relevance Score', fontsize=10, fontweight='bold')
-    ax.set_ylabel('Number of Citations', fontsize=10, fontweight='bold')
-    ax.set_title('Relevance Score vs Citation Count\n(Does relevance predict impact?)', 
-                 fontsize=11, fontweight='bold', pad=10)
-    ax.legend(fontsize=8, frameon=True, edgecolor='black', loc='upper left')
-    ax.grid(True, alpha=0.3, linestyle='--')
-    
-    # Use log scale for citations if range is large
-    if df['citations'].max() > 100:
-        ax.set_yscale('log')
-        ax.set_ylabel('Number of Citations (log scale)', fontsize=10, fontweight='bold')
-    
-    plt.tight_layout()
-    return fig
-
-def create_cagr_chart(consistent_data: Dict[str, Dict], years: List[int]):
-    """
-    Create chart showing Compound Annual Growth Rate for each topic
-    """
-    topics = []
-    cagrs = []
-    periods = []
-    start_counts = []
-    end_counts = []
-    
-    for topic, data in consistent_data.items():
-        if data.get('cagr') and data['cagr']:
-            topics.append(topic)
-            cagrs.append(data['cagr']['cagr'])
-            periods.append(data['cagr']['period'])
-            start_counts.append(data['cagr']['start_count'])
-            end_counts.append(data['cagr']['end_count'])
-    
-    if not topics:
-        return None
-    
-    # Sort by CAGR
-    sorted_data = sorted(zip(topics, cagrs, periods, start_counts, end_counts), 
-                        key=lambda x: x[1], reverse=True)
-    topics = [x[0] for x in sorted_data]
-    cagrs = [x[1] for x in sorted_data]
-    periods = [x[2] for x in sorted_data]
-    start_counts = [x[3] for x in sorted_data]
-    end_counts = [x[4] for x in sorted_data]
-    
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
-    
-    # Apply scientific style
-    for ax in [ax1, ax2]:
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        ax.spines['bottom'].set_linewidth(1.0)
-        ax.spines['left'].set_linewidth(1.0)
-        ax.tick_params(axis='both', which='major', labelsize=9)
-    
-    # Plot 1: CAGR values
-    y_pos = np.arange(len(topics))
-    bars1 = ax1.barh(y_pos, cagrs, color='gray', edgecolor='black', linewidth=0.5)
-    
-    # Color positive/negative differently
-    for i, (bar, cagr) in enumerate(zip(bars1, cagrs)):
-        if cagr < 0:
-            bar.set_color('lightcoral')
-        elif cagr > 10:
-            bar.set_color('darkgreen')
-    
-    ax1.set_yticks(y_pos)
-    ax1.set_yticklabels(topics, fontsize=9)
-    ax1.set_xlabel('Compound Annual Growth Rate (%)', fontsize=10, fontweight='bold')
-    ax1.set_title(f'A) Growth Rate ({periods[0]})', fontsize=11, fontweight='bold', pad=10)
-    
-    # Add zero line
-    ax1.axvline(0, color='black', linewidth=0.8, linestyle='-')
-    
-    # Add values to bars
-    for i, (bar, cagr, start, end) in enumerate(zip(bars1, cagrs, start_counts, end_counts)):
-        ax1.text(cagr + (max(cagrs)*0.02 if cagr >= 0 else -max(cagrs)*0.1), 
-                bar.get_y() + bar.get_height()/2,
-                f'{cagr:.1f}% ({start}→{end})', va='center', fontsize=7,
-                ha='left' if cagr >= 0 else 'right')
-    
-    # Plot 2: Growth visualization (start vs end)
-    width = 0.35
-    x = np.arange(len(topics))
-    
-    ax2.bar(x - width/2, start_counts, width, label='Start', 
-            color='lightgray', edgecolor='black', linewidth=0.5)
-    ax2.bar(x + width/2, end_counts, width, label='End', 
-            color='gray', edgecolor='black', linewidth=0.5)
-    
-    ax2.set_xticks(x)
-    ax2.set_xticklabels(topics, rotation=45, ha='right', fontsize=8)
-    ax2.set_xlabel('Research Topic', fontsize=10, fontweight='bold')
-    ax2.set_ylabel('Number of Publications', fontsize=10, fontweight='bold')
-    ax2.set_title('B) Publication Count: Start vs End of Period', fontsize=11, fontweight='bold', pad=10)
-    ax2.legend(fontsize=8, frameon=True, edgecolor='black')
-    
-    plt.suptitle('Publication Growth Analysis (CAGR)', fontsize=12, fontweight='bold', y=1.02)
-    plt.tight_layout()
-    return fig
-
-def create_peak_year_analysis(consistent_data: Dict[str, Dict]):
-    """
-    Create chart showing peak publication year for each topic
-    """
-    topics = []
-    peak_years = []
-    peak_counts = []
-    current_counts = []  # Count in most recent year
-    
-    # Get most recent year from data
-    all_years = []
-    for data in consistent_data.values():
-        all_years.extend(data['yearly'].keys())
-    if not all_years:
-        return None
-    latest_year = max(all_years)
-    
-    for topic, data in consistent_data.items():
-        if data['peak_year'] is not None:
-            topics.append(topic)
-            peak_years.append(data['peak_year'])
-            peak_counts.append(data['peak_count'])
-            current_counts.append(data['yearly'].get(latest_year, 0))
-    
-    if not topics:
-        return None
-    
-    # Sort by peak year
-    sorted_data = sorted(zip(topics, peak_years, peak_counts, current_counts), 
-                        key=lambda x: x[1])
-    topics = [x[0] for x in sorted_data]
-    peak_years = [x[1] for x in sorted_data]
-    peak_counts = [x[2] for x in sorted_data]
-    current_counts = [x[3] for x in sorted_data]
-    
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
-    
-    # Apply scientific style
-    for ax in [ax1, ax2]:
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        ax.spines['bottom'].set_linewidth(1.0)
-        ax.spines['left'].set_linewidth(1.0)
-        ax.tick_params(axis='both', which='major', labelsize=9)
-    
-    # Plot 1: Peak years
-    y_pos = np.arange(len(topics))
-    colors = []
-    for year in peak_years:
-        if year < latest_year - 3:
-            colors.append('lightcoral')  # Past peak
-        elif year > latest_year - 2:
-            colors.append('lightgreen')  # Still growing
-        else:
-            colors.append('lightyellow')  # Plateau
-    
-    bars1 = ax1.barh(y_pos, peak_years, color=colors, edgecolor='black', linewidth=0.5)
-    ax1.set_yticks(y_pos)
-    ax1.set_yticklabels(topics, fontsize=9)
-    ax1.set_xlabel('Peak Publication Year', fontsize=10, fontweight='bold')
-    ax1.set_title('A) Peak Year of Publication Activity', fontsize=11, fontweight='bold', pad=10)
-    
-    # Add vertical line for current year
-    ax1.axvline(latest_year, color='red', linestyle='--', linewidth=1, label=f'Current ({latest_year})')
-    
-    # Add values
-    for i, (bar, year, count) in enumerate(zip(bars1, peak_years, peak_counts)):
-        ax1.text(year + 0.5, bar.get_y() + bar.get_height()/2,
-                f'{year} ({count} papers)', va='center', fontsize=8)
-    
-    ax1.legend(fontsize=8, frameon=True, edgecolor='black')
-    
-    # Plot 2: Peak vs Current
-    width = 0.35
-    x = np.arange(len(topics))
-    
-    ax2.bar(x - width/2, peak_counts, width, label='Peak', 
-            color='lightgray', edgecolor='black', linewidth=0.5)
-    ax2.bar(x + width/2, current_counts, width, label=f'Current ({latest_year})', 
-            color='gray', edgecolor='black', linewidth=0.5)
-    
-    ax2.set_xticks(x)
-    ax2.set_xticklabels(topics, rotation=45, ha='right', fontsize=8)
-    ax2.set_xlabel('Research Topic', fontsize=10, fontweight='bold')
-    ax2.set_ylabel('Number of Publications', fontsize=10, fontweight='bold')
-    ax2.set_title('B) Peak vs Current Publication Counts', fontsize=11, fontweight='bold', pad=10)
-    ax2.legend(fontsize=8, frameon=True, edgecolor='black')
-    
-    # Add trend indicators
-    for i, (peak, current) in enumerate(zip(peak_counts, current_counts)):
-        if current > peak * 0.9:
-            status = "⚡ Active"
-        elif current > peak * 0.5:
-            status = "📉 Declining"
-        else:
-            status = "💤 Past peak"
-        ax2.text(i, max(peak, current) * 1.05, status, ha='center', fontsize=7)
-    
-    plt.suptitle('Publication Peak Analysis', fontsize=12, fontweight='bold', y=1.02)
-    plt.tight_layout()
-    return fig
-
-def create_open_access_share_chart(consistent_data: Dict[str, Dict], years: List[int]):
-    """
-    Create chart showing Open Access share by topic and over time
-    """
-    # Prepare data by topic
-    topic_oa_data = {}
-    
-    for topic, data in consistent_data.items():
-        if data['top_works']:
-            oa_count = sum(1 for w in data['top_works'] if enrich_work_data(w).get('is_oa', False))
-            oa_share = (oa_count / len(data['top_works'])) * 100
-            topic_oa_data[topic] = {
-                'share': oa_share,
-                'count': oa_count,
-                'total': len(data['top_works'])
-            }
-    
-    if not topic_oa_data:
-        return None
-    
-    # Create figure with two subplots
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
-    
-    # Apply scientific style
-    for ax in [ax1, ax2]:
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        ax.spines['bottom'].set_linewidth(1.0)
-        ax.spines['left'].set_linewidth(1.0)
-        ax.tick_params(axis='both', which='major', labelsize=9)
-    
-    # Plot 1: OA share by topic
-    topics = list(topic_oa_data.keys())
-    shares = [topic_oa_data[t]['share'] for t in topics]
-    counts = [topic_oa_data[t]['count'] for t in topics]
-    totals = [topic_oa_data[t]['total'] for t in topics]
-    
-    # Sort by share
-    sorted_data = sorted(zip(topics, shares, counts, totals), key=lambda x: x[1], reverse=True)
-    topics = [x[0] for x in sorted_data]
-    shares = [x[1] for x in sorted_data]
-    counts = [x[2] for x in sorted_data]
-    totals = [x[3] for x in sorted_data]
-    
-    y_pos = np.arange(len(topics))
-    bars1 = ax1.barh(y_pos, shares, color='gray', edgecolor='black', linewidth=0.5)
-    ax1.set_yticks(y_pos)
-    ax1.set_yticklabels(topics, fontsize=9)
-    ax1.set_xlabel('Open Access Share (%)', fontsize=10, fontweight='bold')
-    ax1.set_title('A) Open Access Share by Topic', fontsize=11, fontweight='bold', pad=10)
-    
-    # Add values to bars
-    for i, (bar, share, count, total) in enumerate(zip(bars1, shares, counts, totals)):
-        ax1.text(share + 2, bar.get_y() + bar.get_height()/2,
-                f'{share:.1f}% ({count}/{total})', va='center', fontsize=8)
-    
-    # Plot 2: OA trend over years (aggregate across all topics)
-    # Collect yearly OA data
-    yearly_oa = defaultdict(lambda: {'total': 0, 'oa': 0})
-    
-    for topic, data in consistent_data.items():
-        for work in data['top_works']:
-            enriched = enrich_work_data(work)
-            year = enriched.get('publication_year')
-            if year in years:
-                yearly_oa[year]['total'] += 1
-                if enriched.get('is_oa', False):
-                    yearly_oa[year]['oa'] += 1
-    
-    # Sort years
-    sorted_years = sorted([y for y in yearly_oa.keys() if yearly_oa[y]['total'] > 0])
-    if not sorted_years:
-        ax2.text(0.5, 0.5, 'Insufficient data for trend analysis', 
-                ha='center', va='center', transform=ax2.transAxes)
-    else:
-        oa_shares = [(yearly_oa[y]['oa'] / yearly_oa[y]['total']) * 100 for y in sorted_years]
-        total_papers = [yearly_oa[y]['total'] for y in sorted_years]
-        
-        # Create line chart with markers
-        ax2.plot(sorted_years, oa_shares, 'o-', color='gray', linewidth=2, markersize=6,
-                markerfacecolor='white', markeredgecolor='black', markeredgewidth=1)
-        
-        # Add bubble size representing total papers
-        for year, share, total in zip(sorted_years, oa_shares, total_papers):
-            ax2.annotate(f'n={total}', (year, share), 
-                        xytext=(0, 10), textcoords='offset points',
-                        ha='center', fontsize=7)
-        
-        ax2.set_xlabel('Publication Year', fontsize=10, fontweight='bold')
-        ax2.set_ylabel('Open Access Share (%)', fontsize=10, fontweight='bold')
-        ax2.set_title('B) Open Access Trend Over Time', fontsize=11, fontweight='bold', pad=10)
-        ax2.set_xticks(sorted_years)
-        ax2.set_xticklabels([str(y) for y in sorted_years], rotation=45, ha='right')
-        ax2.grid(True, alpha=0.3, linestyle='--')
-    
-    plt.suptitle('Open Access Analysis', fontsize=12, fontweight='bold', y=1.02)
-    plt.tight_layout()
-    return fig
-
-def create_correlation_heatmap(consistent_data: Dict[str, Dict]):
-    """Create correlation heatmap between topics based on yearly patterns"""
-    topics = [t for t, data in consistent_data.items() if data['total'] > 0]
-    if len(topics) < 2:
-        return None
-    
-    # Create matrix of yearly patterns
-    years = sorted(set().union(*[set(data['yearly'].keys()) for data in consistent_data.values()]))
-    patterns = []
-    
-    for topic in topics:
-        pattern = [consistent_data[topic]['yearly'].get(year, 0) for year in years]
-        patterns.append(pattern)
-    
-    # Calculate correlation matrix
-    corr_matrix = np.corrcoef(patterns)
-    
-    # Create heatmap
-    fig, ax = plt.subplots(figsize=(10, 8))
-    
-    # Create heatmap with colormap
-    im = ax.imshow(corr_matrix, cmap='RdBu_r', vmin=-1, vmax=1, aspect='auto')
-    
-    # Add labels
-    ax.set_xticks(np.arange(len(topics)))
-    ax.set_yticks(np.arange(len(topics)))
-    ax.set_xticklabels(topics, rotation=45, ha='right', fontsize=8)
-    ax.set_yticklabels(topics, fontsize=8)
-    
-    # Add correlation values
-    for i in range(len(topics)):
-        for j in range(len(topics)):
-            text = ax.text(j, i, f'{corr_matrix[i, j]:.2f}',
-                          ha='center', va='center', color='white' if abs(corr_matrix[i, j]) > 0.5 else 'black',
-                          fontsize=7, fontweight='bold')
-    
-    # Add colorbar
-    cbar = plt.colorbar(im, ax=ax, pad=0.02)
-    cbar.set_label('Pearson Correlation', fontsize=9)
-    
-    ax.set_title('Topic Correlation Heatmap\n(Based on yearly publication patterns)', 
-                fontsize=11, fontweight='bold', pad=10)
+            bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='black'))
     
     plt.tight_layout()
     return fig
@@ -2407,8 +2831,8 @@ def export_to_csv(works_by_topic: Dict[str, List[Dict]]) -> bytes:
     df = pd.DataFrame(all_rows)
     return df.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
 
-def export_to_excel(works_by_topic: Dict[str, List[Dict]]) -> bytes:
-    """Export results to Excel with papers sorted from newest to oldest"""
+def export_to_excel(works_by_topic: Dict[str, List[Dict]], highly_cited_papers: List[Dict] = None) -> bytes:
+    """Export results to Excel with papers sorted from newest to oldest and additional sheets"""
     output = io.BytesIO()
     
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -2424,26 +2848,22 @@ def export_to_excel(works_by_topic: Dict[str, List[Dict]]) -> bytes:
             df_all = pd.DataFrame(all_rows)
             
             # СОРТИРОВКА: от новых к старым
-            # Сначала по году (убывание), затем по дате (убывание)
             df_all = df_all.sort_values(
                 by=['publication_year', 'publication_date'], 
-                ascending=[False, False]  # False = descending (новые сверху)
+                ascending=[False, False]
             )
             
             df_all.to_excel(writer, sheet_name='All Papers', index=False)
         
-        # Separate sheets for each sub-topic (тоже с сортировкой)
+        # Separate sheets for each sub-topic
         for topic, works in works_by_topic.items():
             if works:
-                # Собираем данные для конкретной темы
                 topic_rows = []
                 for work in works:
                     enriched = enrich_work_data(work)
                     topic_rows.append(enriched)
                 
                 df_topic = pd.DataFrame(topic_rows)
-                
-                # СОРТИРОВКА для каждой темы
                 df_topic = df_topic.sort_values(
                     by=['publication_year', 'publication_date'], 
                     ascending=[False, False]
@@ -2452,11 +2872,35 @@ def export_to_excel(works_by_topic: Dict[str, List[Dict]]) -> bytes:
                 sheet_name = re.sub(r'[^\w\s-]', '', topic)[:31]
                 df_topic.to_excel(writer, sheet_name=sheet_name, index=False)
         
-        # Formatting (оставляем как есть)
+        # 4.6. Highly cited papers sheet (85th percentile)
+        if highly_cited_papers:
+            df_highly_cited = pd.DataFrame(highly_cited_papers)
+            if not df_highly_cited.empty:
+                df_highly_cited = df_highly_cited.sort_values(
+                    by=['cited_by_count'], 
+                    ascending=[False]
+                )
+                df_highly_cited.to_excel(writer, sheet_name=f'Highly Cited (85th pct)', index=False)
+        
+        # 4.6. Top 100 papers by Field-Weighted Citation Impact
+        all_papers_with_fwci = []
+        for topic, works in works_by_topic.items():
+            for work in works:
+                enriched = enrich_work_data(work)
+                if enriched.get('fwci') is not None:
+                    enriched['sub_topic'] = topic
+                    all_papers_with_fwci.append(enriched)
+        
+        if all_papers_with_fwci:
+            df_fwci = pd.DataFrame(all_papers_with_fwci)
+            df_fwci = df_fwci.sort_values(by=['fwci'], ascending=[False]).head(100)
+            df_fwci.to_excel(writer, sheet_name='Top 100 by FWCI', index=False)
+        
+        # Formatting
         workbook = writer.book
         header_format = workbook.add_format({
             'bold': True,
-            'bg_color': st.session_state['color_palette']['primary'],
+            'bg_color': st.session_state['ui_color_palette']['primary'],
             'font_color': 'white',
             'border': 1
         })
@@ -2465,12 +2909,14 @@ def export_to_excel(works_by_topic: Dict[str, List[Dict]]) -> bytes:
             worksheet = writer.sheets[sheet_name]
             if sheet_name == 'All Papers':
                 df = df_all
+            elif sheet_name == 'Highly Cited (85th pct)' and highly_cited_papers:
+                df = pd.DataFrame(highly_cited_papers)
+            elif sheet_name == 'Top 100 by FWCI' and all_papers_with_fwci:
+                df = df_fwci
             else:
-                # Находим соответствующий DataFrame для текущего листа
                 df = None
                 for t, works in works_by_topic.items():
                     if re.sub(r'[^\w\s-]', '', t)[:31] == sheet_name:
-                        # Создаем DataFrame с сортировкой
                         temp_rows = []
                         for work in works:
                             temp_rows.append(enrich_work_data(work))
@@ -2481,7 +2927,7 @@ def export_to_excel(works_by_topic: Dict[str, List[Dict]]) -> bytes:
                         )
                         break
             
-            if df is not None:
+            if df is not None and not df.empty:
                 for col_num, col_name in enumerate(df.columns):
                     worksheet.write(0, col_num, col_name, header_format)
                     max_len = max(
@@ -2492,8 +2938,8 @@ def export_to_excel(works_by_topic: Dict[str, List[Dict]]) -> bytes:
     
     return output.getvalue()
 
-def generate_pdf_report(works_by_topic: Dict[str, List[Dict]], level1_term: str, level2_term: Optional[str] = None, years: Optional[List[int]] = None) -> Optional[bytes]:
-    """Generate PDF report with analysis results"""
+def generate_pdf_report(works_by_topic: Dict[str, List[Dict]], level1_term: str, level2_term: Optional[str] = None, years: Optional[List[int]] = None, highly_cited_papers: List[Dict] = None) -> Optional[bytes]:
+    """Generate PDF report with analysis results including highly cited papers"""
     if not PDF_AVAILABLE:
         return None
     
@@ -2660,8 +3106,9 @@ def generate_pdf_report(works_by_topic: Dict[str, List[Dict]], level1_term: str,
     
     toc_items = [
         "1. Topic Distribution Summary",
-        "2. Detailed Paper Analysis",
-        "3. Statistical Summary"
+        "2. Highly Cited Papers (>85th percentile)",
+        "3. Top 100 Papers by Field-Weighted Citation Impact",
+        "4. Detailed Paper Analysis by Topic"
     ]
     
     for item in toc_items:
@@ -2701,9 +3148,90 @@ def generate_pdf_report(works_by_topic: Dict[str, List[Dict]], level1_term: str,
     
     story.append(PageBreak())
     
+    # ========== HIGHLY CITED PAPERS ==========
+    
+    if highly_cited_papers:
+        story.append(Paragraph("2. HIGHLY CITED PAPERS (>85th PERCENTILE)", title_style))
+        story.append(Spacer(1, 0.5*cm))
+        
+        story.append(Paragraph(f"Total highly cited papers: {len(highly_cited_papers)}", subtitle_style))
+        story.append(Spacer(1, 0.3*cm))
+        
+        for i, paper in enumerate(highly_cited_papers[:50], 1):  # Show top 50 to save space
+            # Title
+            title = clean_text(paper.get('title', 'No title'))
+            story.append(Paragraph(f"{i}. {title}", paper_title_style))
+            
+            # Authors
+            authors = paper.get('authors', [])
+            if authors:
+                authors_text = ', '.join(authors[:3])
+                if len(authors) > 3:
+                    authors_text += f' et al. ({len(authors)} authors)'
+                story.append(Paragraph(f"Authors: {authors_text}", authors_style))
+            
+            # Metrics
+            metrics = f"Citations: {paper.get('cited_by_count', 0):,} | Year: {paper.get('publication_year', 'N/A')} | Topic: {paper.get('topic', 'N/A')} | FWCI: {paper.get('fwci', 'N/A')}"
+            story.append(Paragraph(metrics, metrics_style))
+            
+            # DOI
+            doi = paper.get('doi', '')
+            if doi:
+                if doi.startswith('10.'):
+                    doi_url = f"https://doi.org/{doi}"
+                elif doi.startswith('https://doi.org/'):
+                    doi_url = doi
+                else:
+                    doi_url = f"https://doi.org/{doi}"
+                
+                doi_link = f'<link href="{doi_url}"><font color="blue"><u>{doi}</u></font></link>'
+                story.append(Paragraph(f"DOI: {doi_link}", details_style))
+            
+            story.append(Spacer(1, 0.2*cm))
+            story.append(Paragraph("─" * 30, separator_style))
+            story.append(Spacer(1, 0.2*cm))
+        
+        story.append(PageBreak())
+    
+    # ========== TOP 100 BY FWCI ==========
+    
+    story.append(Paragraph("3. TOP 100 PAPERS BY FIELD-WEIGHTED CITATION IMPACT", title_style))
+    story.append(Spacer(1, 0.5*cm))
+    
+    # Collect and sort by FWCI
+    fwci_papers = []
+    for topic, works in works_by_topic.items():
+        for work in works:
+            enriched = enrich_work_data(work)
+            if enriched.get('fwci') is not None:
+                enriched['topic'] = topic
+                fwci_papers.append(enriched)
+    
+    fwci_papers.sort(key=lambda x: x.get('fwci', 0), reverse=True)
+    
+    if fwci_papers:
+        for i, paper in enumerate(fwci_papers[:100], 1):
+            title = clean_text(paper.get('title', 'No title'))
+            story.append(Paragraph(f"{i}. {title} (FWCI: {paper.get('fwci', 0):.2f})", paper_title_style))
+            
+            authors = paper.get('authors', [])
+            if authors:
+                authors_text = ', '.join(authors[:2])
+                if len(authors) > 2:
+                    authors_text += f' et al.'
+                story.append(Paragraph(f"Authors: {authors_text}", authors_style))
+            
+            metrics = f"Citations: {paper.get('cited_by_count', 0):,} | Year: {paper.get('publication_year', 'N/A')} | Topic: {paper.get('topic', 'N/A')}"
+            story.append(Paragraph(metrics, details_style))
+            
+            if i < 100:
+                story.append(Spacer(1, 0.1*cm))
+    
+    story.append(PageBreak())
+    
     # ========== DETAILED ANALYSIS ==========
     
-    story.append(Paragraph("2. DETAILED PAPER ANALYSIS", title_style))
+    story.append(Paragraph("4. DETAILED PAPER ANALYSIS BY TOPIC", title_style))
     story.append(Spacer(1, 0.5*cm))
     
     for topic, works in works_by_topic.items():
@@ -2711,7 +3239,7 @@ def generate_pdf_report(works_by_topic: Dict[str, List[Dict]], level1_term: str,
             story.append(Paragraph(f"Topic: {topic}", topic_style))
             story.append(Spacer(1, 0.3*cm))
             
-            for i, work in enumerate(works, 1):  # Show ALL papers, not just 20
+            for i, work in enumerate(works[:20], 1):  # Show top 20 per topic to save space
                 enriched = enrich_work_data(work)
                 
                 # Title
@@ -2727,13 +3255,12 @@ def generate_pdf_report(works_by_topic: Dict[str, List[Dict]], level1_term: str,
                     story.append(Paragraph(f"Authors: {authors_text}", authors_style))
                 
                 # Metrics
-                metrics = f"Citations: {enriched.get('cited_by_count', 0):,} | Year: {enriched.get('publication_year', 'N/A')} | OA: {'Yes' if enriched.get('is_oa') else 'No'}"
+                metrics = f"Citations: {enriched.get('cited_by_count', 0):,} | Year: {enriched.get('publication_year', 'N/A')} | OA: {'Yes' if enriched.get('is_oa') else 'No'} | FWCI: {enriched.get('fwci', 'N/A')}"
                 story.append(Paragraph(metrics, metrics_style))
                 
                 # DOI
                 doi = enriched.get('doi', '')
                 if doi:
-                    # Format DOI URL
                     if doi.startswith('10.'):
                         doi_url = f"https://doi.org/{doi}"
                     elif doi.startswith('https://doi.org/'):
@@ -2741,75 +3268,22 @@ def generate_pdf_report(works_by_topic: Dict[str, List[Dict]], level1_term: str,
                     else:
                         doi_url = f"https://doi.org/{doi}"
                     
-                    # Create clickable link
                     doi_link = f'<link href="{doi_url}"><font color="blue"><u>{doi}</u></font></link>'
                     story.append(Paragraph(f"DOI: {doi_link}", details_style))
                 
-                # Separator
-                story.append(Spacer(1, 0.2*cm))
-                story.append(Paragraph("─" * 30, separator_style))
-                story.append(Spacer(1, 0.2*cm))
+                story.append(Spacer(1, 0.1*cm))
             
             story.append(PageBreak())
     
-    # ========== STATISTICAL SUMMARY ==========
-    
-    story.append(Paragraph("3. STATISTICAL SUMMARY", title_style))
-    story.append(Spacer(1, 0.5*cm))
-    
-    # Collect statistics
-    all_citations = []
-    all_years = []
-    all_scores = []
-    
-    for works in works_by_topic.values():
-        for work in works:
-            enriched = enrich_work_data(work)
-            all_citations.append(enriched.get('cited_by_count', 0))
-            if enriched.get('publication_year'):
-                all_years.append(enriched.get('publication_year'))
-            all_scores.append(enriched.get('relevance_score', 0))
-    
-    if all_citations:
-        stats_data = [
-            ["Metric", "Value"],
-            ["Total Papers", f"{len(all_citations):,}"],
-            ["Average Citations", f"{np.mean(all_citations):.2f}"],
-            ["Median Citations", f"{np.median(all_citations):.2f}"],
-            ["Max Citations", f"{max(all_citations):,}"],
-            ["Papers with 0 citations", f"{sum(1 for c in all_citations if c == 0):,}"],
-            ["Open Access Papers", f"{sum(1 for w in works_by_topic.values() for work in w if enrich_work_data(work).get('is_oa')):,}"],
-            ["Average Relevance Score", f"{np.mean(all_scores):.2f}"],
-        ]
-        
-        if all_years:
-            stats_data.append(["Earliest Year", min(all_years)])
-            stats_data.append(["Latest Year", max(all_years)])
-        
-        stats_table = Table(stats_data, colWidths=[doc.width/2, doc.width/3])
-        stats_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), reportlab_colors.HexColor('#27AE60')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), reportlab_colors.white),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 11),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), reportlab_colors.HexColor('#F8F9FA')),
-            ('GRID', (0, 0), (-1, -1), 0.5, reportlab_colors.HexColor('#D5DBDB')),
-            ('FONTSIZE', (0, 1), (-1, -1), 10),
-        ]))
-        story.append(stats_table)
-    
     # ========== CONCLUSION ==========
     
-    story.append(PageBreak())
     story.append(Paragraph("CONCLUSION", title_style))
     story.append(Spacer(1, 0.5*cm))
     
     conclusions = [
         f"This report analyzed {total_papers:,} papers across {len([t for t, w in works_by_topic.items() if w])} topics.",
+        f"Identified {len(highly_cited_papers) if highly_cited_papers else 0} highly cited papers (>85th percentile).",
         "The analysis provides insights into the distribution and impact of research in these areas.",
-        "Papers with low citation counts may represent emerging research directions.",
         "For the most current data, please visit the original sources via the provided DOIs."
     ]
     
@@ -2836,17 +3310,65 @@ def main():
     # Header
     st.markdown(f'<h1 class="main-header">Publication Clustering</h1>', unsafe_allow_html=True)
     st.markdown(f"""
-    <p style="font-size: 1rem; color: {colors['text']}; margin-bottom: 1.5rem;">
-    Multi-level literature search with topic clustering and network visualization
+    <p style="font-size: 1rem; color: {ui_colors['text']}; margin-bottom: 1.5rem;">
+    Multi-level literature search with topic clustering and advanced bibliometric analysis
     </p>
     """, unsafe_allow_html=True)
     
-    # Display current theme info
+    # Display current UI theme info
     st.markdown(f"""
-    <div style="text-align: right; font-size: 0.8rem; color: {colors['primary']}; margin-bottom: 0.5rem;">
-        Theme: {colors['name']}
+    <div style="text-align: right; font-size: 0.8rem; color: {ui_colors['primary']}; margin-bottom: 0.5rem;">
+        UI Theme: {ui_colors['name']}
     </div>
     """, unsafe_allow_html=True)
+    
+    # ========================================================================
+    # COLOR PALETTE SELECTORS (NEW)
+    # ========================================================================
+    
+    with st.sidebar:
+        st.markdown("### 🎨 Plot Color Settings")
+        st.markdown("These settings affect only the scientific plots, not the UI")
+        
+        # Discrete palette selector
+        discrete_options = list(COLOR_PALETTES_SCIENTIFIC_DISCRETE.keys())
+        selected_discrete = st.selectbox(
+            "Discrete Color Palette",
+            options=discrete_options,
+            index=discrete_options.index(st.session_state.get('discrete_palette_name', 'nature')),
+            key='discrete_palette_selector'
+        )
+        st.session_state['discrete_palette_name'] = selected_discrete
+        
+        # Show preview of discrete palette
+        preview_colors = COLOR_PALETTES_SCIENTIFIC_DISCRETE[selected_discrete][:7]
+        preview_html = '<div style="display: flex; gap: 5px; margin: 10px 0;">'
+        for color in preview_colors:
+            preview_html += f'<div style="width: 30px; height: 20px; background-color: {color}; border: 1px solid black;"></div>'
+        preview_html += '</div>'
+        st.markdown(preview_html, unsafe_allow_html=True)
+        
+        # Gradient palette selector
+        gradient_options = list(GRADIENT_PALETTES.keys())
+        selected_gradient = st.selectbox(
+            "Gradient Color Map",
+            options=gradient_options,
+            index=gradient_options.index(st.session_state.get('gradient_palette_name', 'viridis')),
+            key='gradient_palette_selector'
+        )
+        st.session_state['gradient_palette_name'] = selected_gradient
+        
+        # Show preview of gradient
+        st.markdown("Preview:")
+        gradient_preview = np.linspace(0, 1, 100).reshape(1, -1)
+        fig_preview, ax_preview = plt.subplots(figsize=(5, 0.5))
+        ax_preview.imshow(gradient_preview, aspect='auto', cmap=GRADIENT_PALETTES[selected_gradient])
+        ax_preview.set_xticks([])
+        ax_preview.set_yticks([])
+        for spine in ax_preview.spines.values():
+            spine.set_visible(False)
+        st.pyplot(fig_preview)
+        plt.close(fig_preview)
     
     # Initialize session state
     if 'step' not in st.session_state:
@@ -2942,13 +3464,12 @@ def main():
         
         current_year = datetime.now().year
         
-        # Change order: Range first
         year_option = st.radio(
             "Year filter type",
             ["Range", "Single year", "Multiple years"],
             horizontal=True,
             key="year_type",
-            index=0  # Range by default
+            index=0
         )
         
         if year_option == "Single year":
@@ -2969,14 +3490,12 @@ def main():
         with st.expander("🔧 Test Query Before Full Analysis"):
             if st.button("Test Current Query"):
                 with st.spinner("Testing query..."):
-                    # FIXED: Added proper None checking for level2
                     level2_for_test = level2.strip() if level2 and level2.strip() else None
                     temp_count = get_total_count(level1.strip(), level2_for_test, years)
                     
                     if temp_count > 0:
                         st.success(f"✅ Found {temp_count:,} papers matching your Level 1+2 criteria")
                         
-                        # Additional information
                         parsed_level2 = parse_query_terms(level2.strip()) if level2 and level2.strip() else '(not specified)'
                         st.markdown(f"""
                         <div class="info-message">
@@ -3103,7 +3622,7 @@ def main():
                 st.rerun()
     
     # ========================================================================
-    # STEP 3: RESULTS
+    # STEP 3: RESULTS - UPDATED WITH NEW ANALYTICS
     # ========================================================================
     
     elif st.session_state.step == 3:
@@ -3151,8 +3670,8 @@ def main():
             All charts use the SAME source data from group_by queries.<br>
             • Topic totals are calculated from yearly distributions<br>
             • Yearly distributions sum exactly to topic totals<br>
-            • Citation distributions are now calculated for ALL papers using group_by (4 requests per topic)<br>
-            • Additional analytics (Gini, CAGR, peak year, OA share) are calculated from the available data
+            • Citation distributions are now calculated for ALL papers using group_by (7 requests per topic)<br>
+            • All visualizations use scientific publication style independent of UI theme
         </div>
         """, unsafe_allow_html=True)
         
@@ -3186,291 +3705,214 @@ def main():
         </div>
         """, unsafe_allow_html=True)
         
-        # Tabs for different views - ENHANCED WITH NEW ANALYTICS
-        tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        # Tabs for different views - UPDATED: REMOVED CLUSTER GRAPH, ADDED ADVANCED
+        tab1, tab2, tab3, tab4 = st.tabs([
             "📈 Topic Distribution", 
-            "🌳 Cluster Graph", 
-            "📊 Advanced Analytics",
             "📋 Papers by Topic", 
-            "📥 Export"
+            "📥 Export",
+            "📊 Advanced Bibliometrics"
         ])
         
         with tab1:
-            # Topic distribution chart
-            if st.session_state.topic_counts:
-                st.markdown('<div class="scientific-plot">', unsafe_allow_html=True)
-                st.markdown("<h4>Sub-topic Distribution</h4>", unsafe_allow_html=True)
-                
-                fig = create_scientific_bar_chart(
-                    st.session_state.topic_counts,
-                    st.session_state.level2_count,
-                    f"Publications by Sub-topic ({min(st.session_state.years_input)}-{max(st.session_state.years_input)})"
-                )
-                if fig:
-                    st.pyplot(fig)
-                    plt.close(fig)
-                st.markdown('</div>', unsafe_allow_html=True)
+            # 4.1. Sub-topic Distribution
+            st.markdown('<div class="scientific-plot">', unsafe_allow_html=True)
+            st.markdown("<h4>4.1. Sub-topic Distribution Analysis</h4>", unsafe_allow_html=True)
             
-            # Combined yearly charts using CONSISTENT data
+            col_abs, col_pct = st.columns(2)
+            
+            with col_abs:
+                # 4.1.1. Absolute counts
+                fig_abs = create_subtopic_distribution_absolute(
+                    st.session_state.topic_counts,
+                    st.session_state.level2_count
+                )
+                if fig_abs:
+                    st.pyplot(fig_abs)
+                    plt.close(fig_abs)
+                else:
+                    st.info("No data for absolute distribution")
+            
+            with col_pct:
+                # 4.1.2. Percentage distribution
+                fig_pct = create_subtopic_distribution_percentage(
+                    st.session_state.topic_counts,
+                    st.session_state.level2_count
+                )
+                if fig_pct:
+                    st.pyplot(fig_pct)
+                    plt.close(fig_pct)
+                else:
+                    st.info("No data for percentage distribution")
+            
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+            # 4.2. Comparative Yearly Distribution
+            st.markdown('<div class="scientific-plot">', unsafe_allow_html=True)
+            st.markdown("<h4>4.2. Comparative Yearly Distribution Analysis</h4>", unsafe_allow_html=True)
+            
             if consistent_data:
-                st.markdown('<div class="scientific-plot">', unsafe_allow_html=True)
-                st.markdown("<h4>Comparative Yearly Distribution Analysis</h4>", unsafe_allow_html=True)
+                col_stack, col_group = st.columns(2)
                 
-                fig_combined = create_combined_yearly_charts(
+                with col_stack:
+                    # 4.2.1. Stacked
+                    fig_stack = create_stacked_yearly_chart(
+                        consistent_data,
+                        st.session_state.years_input,
+                        st.session_state.level2_input
+                    )
+                    if fig_stack:
+                        st.pyplot(fig_stack)
+                        plt.close(fig_stack)
+                    else:
+                        st.info("No data for stacked chart")
+                
+                with col_group:
+                    # 4.2.2. Grouped
+                    fig_group = create_grouped_yearly_chart(
+                        consistent_data,
+                        st.session_state.years_input,
+                        st.session_state.level2_input
+                    )
+                    if fig_group:
+                        st.pyplot(fig_group)
+                        plt.close(fig_group)
+                    else:
+                        st.info("No data for grouped chart")
+                
+                # 4.2.3. Normalized
+                fig_norm = create_normalized_yearly_chart(
                     consistent_data,
                     st.session_state.years_input,
                     st.session_state.level2_input
                 )
-                if fig_combined:
-                    st.pyplot(fig_combined)
-                    plt.close(fig_combined)
-                
-                st.markdown("""
-                <div class="info-message">
-                    <strong>📌 Interpretation:</strong><br>
-                    • <b>Stacked chart</b> shows absolute contributions over time<br>
-                    • <b>Normalized chart</b> reveals relative trends (each topic normalized to its maximum)<br>
-                    • <b>Log scale</b> shows absolute values on logarithmic scale - enabling comparison of vastly different scales
-                </div>
-                """, unsafe_allow_html=True)
-                st.markdown('</div>', unsafe_allow_html=True)
+                if fig_norm:
+                    st.pyplot(fig_norm)
+                    plt.close(fig_norm)
+                else:
+                    st.info("No data for normalized chart")
+            else:
+                st.info("No consistent data available")
             
-            # Individual topic charts using CONSISTENT data with enhanced citation distribution
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+            # 4.3. Analysis for each Sub-topic
+            st.markdown('<div class="scientific-plot">', unsafe_allow_html=True)
+            st.markdown("<h4>4.3. Detailed Sub-topic Analysis</h4>", unsafe_allow_html=True)
+            
             for term, data in consistent_data.items():
-                total_count = data['total']
-                yearly_data = data['yearly']
-                citation_distribution = data.get('citation_distribution', {})  # NEW: full distribution
-                top_works = data['top_works']
-                citation_stats = data['citation_stats']
+                if data['total'] > 0:
+                    st.markdown(f"#### {term}")
+                    
+                    col_pub, col_cit = st.columns(2)
+                    
+                    with col_pub:
+                        # 4.3.1. Yearly publications
+                        fig_pub = create_topic_yearly_publications(
+                            term, data, st.session_state.years_input
+                        )
+                        if fig_pub:
+                            st.pyplot(fig_pub)
+                            plt.close(fig_pub)
+                    
+                    with col_cit:
+                        # 4.3.2. Yearly citations
+                        fig_cit = create_topic_yearly_citations(
+                            term, data, st.session_state.years_input
+                        )
+                        if fig_cit:
+                            st.pyplot(fig_cit)
+                            plt.close(fig_cit)
+                    
+                    # 4.3.3. Citation distribution
+                    fig_dist = create_topic_citation_distribution(term, data)
+                    if fig_dist:
+                        st.pyplot(fig_dist)
+                        plt.close(fig_dist)
+                    
+                    st.markdown("---")
+            
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+            # 4.4. Top Journals Analysis
+            st.markdown('<div class="scientific-plot">', unsafe_allow_html=True)
+            st.markdown("<h4>4.4. Top Journals Analysis</h4>", unsafe_allow_html=True)
+            
+            journal_data = get_journal_data(st.session_state.results)
+            topics = [t for t, d in consistent_data.items() if d['total'] > 0]
+            
+            if journal_data:
+                col_j1, col_j2 = st.columns(2)
                 
-                if total_count > 0:
-                    st.markdown(f'<div class="scientific-plot">', unsafe_allow_html=True)
-                    st.markdown(f"<h4>Analysis for: {term} (showing distribution of all {total_count:,} papers)</h4>", unsafe_allow_html=True)
-                    
-                    col1, col2 = st.columns(2)
-                    
-                    with col1:
-                        fig1 = create_yearly_distribution_chart(yearly_data, f"{term}: Publications by Year (all papers)")
-                        if fig1:
-                            st.pyplot(fig1)
-                            plt.close(fig1)
-                    
-                    with col2:
-                        # NEW: Use full citation distribution from group_by
-                        if citation_distribution:
-                            fig2 = create_citation_distribution_chart(
-                                citation_distribution, 
-                                f"{term}: Citation Distribution (ALL {total_count:,} papers)", 
-                                is_full_distribution=True
-                            )
-                            if fig2:
-                                st.pyplot(fig2)
-                                plt.close(fig2)
-                        elif citation_stats:
-                            # Fallback to top_works stats
-                            fig2 = create_citation_distribution_chart(
-                                citation_stats, 
-                                f"{term}: Citation Distribution (based on top {len(top_works)} papers)", 
-                                is_stats=True
-                            )
-                            if fig2:
-                                st.pyplot(fig2)
-                                plt.close(fig2)
-                        else:
-                            st.info(f"No citation data available for {term}")
-                    
-                    # Display Gini coefficient if available
-                    if citation_stats and 'gini' in citation_stats:
-                        gini = citation_stats['gini']
-                        st.markdown(f"""
-                        <div style="background: #f0f0f0; padding: 10px; border-radius: 5px; margin-top: 10px;">
-                            <strong>Gini coefficient: {gini:.3f}</strong> - 
-                            {'Very high inequality (Matthew effect)' if gini > 0.6 else 
-                             'High inequality' if gini > 0.4 else 
-                             'Moderate inequality' if gini > 0.2 else 
-                             'Low inequality'}
-                        </div>
-                        """, unsafe_allow_html=True)
-                    
-                    st.markdown(f'<p style="font-size:0.8rem; color:#666; text-align:right;">Year distribution based on all {total_count:,} papers, citation distribution based on ALL papers via group_by queries</p>', unsafe_allow_html=True)
-                    st.markdown('</div>', unsafe_allow_html=True)
+                with col_j1:
+                    # 4.4.1. Top journals bar
+                    fig_j1 = create_top_journals_bar(journal_data, top_n=15)
+                    if fig_j1:
+                        st.pyplot(fig_j1)
+                        plt.close(fig_j1)
+                
+                with col_j2:
+                    # 4.4.2. Stacked by topics
+                    fig_j2 = create_top_journals_stacked(journal_data, topics, top_n=15)
+                    if fig_j2:
+                        st.pyplot(fig_j2)
+                        plt.close(fig_j2)
+                
+                # 4.4.3. Average citations
+                fig_j3 = create_top_journals_citations(journal_data, top_n=15)
+                if fig_j3:
+                    st.pyplot(fig_j3)
+                    plt.close(fig_j3)
+            else:
+                st.info("No journal data available")
+            
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+            # 4.5. Citation Velocity
+            st.markdown('<div class="scientific-plot">', unsafe_allow_html=True)
+            st.markdown("<h4>4.5. Citation Velocity Analysis</h4>", unsafe_allow_html=True)
+            
+            fig_vel = create_citation_velocity_chart(consistent_data)
+            if fig_vel:
+                st.pyplot(fig_vel)
+                plt.close(fig_vel)
+            else:
+                st.info("No data for citation velocity analysis")
+            
+            st.markdown('</div>', unsafe_allow_html=True)
         
         with tab2:
-            # Enhanced tree visualization
-            st.markdown('<div class="scientific-plot">', unsafe_allow_html=True)
-            st.markdown("<h4>Topic Hierarchy Visualization</h4>", unsafe_allow_html=True)
+            # 4.6. Papers by Topic (includes highly cited indicator)
+            highly_cited_papers = get_highly_cited_papers(st.session_state.results, percentile=85)
             
-            if any(count > 0 for count in st.session_state.topic_counts.values()):
-                fig_tree = create_scientific_tree_visualization(
-                    st.session_state.topic_counts,
-                    st.session_state.level1_input,
-                    st.session_state.level2_input
-                )
-                if fig_tree:
-                    st.pyplot(fig_tree)
-                    plt.close(fig_tree)
-                
-                st.markdown("""
-                <div class="info-message">
-                    <strong>🌳 Tree Diagram Interpretation:</strong><br>
-                    • Root node represents the main research area (Level 1 + Level 2)<br>
-                    • Leaf nodes represent sub-topics (Level 3 terms)<br>
-                    • Branch thickness is proportional to number of publications in each sub-topic<br>
-                    • Node size reflects relative publication count<br>
-                    • This visualization shows the hierarchical relationship between main topic and sub-fields
-                </div>
-                """, unsafe_allow_html=True)
-            else:
-                st.info("No data available for cluster visualization")
+            st.markdown(f"""
+            <div class="info-message">
+                <strong>📋 Highly Cited Papers (>85th percentile):</strong> {len(highly_cited_papers)} papers identified.
+                These will be exported to a separate sheet in Excel and included in PDF report.
+            </div>
+            """, unsafe_allow_html=True)
             
-            st.markdown('</div>', unsafe_allow_html=True)
-        
-        with tab3:
-            # NEW TAB: Advanced Analytics
-            st.markdown('<div class="scientific-plot">', unsafe_allow_html=True)
-            st.markdown("<h4>📊 Advanced Citation and Growth Analytics</h4>", unsafe_allow_html=True)
-            
-            # Create a 2x2 grid for advanced charts
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                # 1. Lorenz Curve (Citation Inequality)
-                st.markdown("**1. Citation Inequality (Lorenz Curve)**")
-                fig_lorenz = create_lorenz_curve(
-                    st.session_state.results,
-                    "Citation Distribution Across All Topics"
-                )
-                if fig_lorenz:
-                    st.pyplot(fig_lorenz)
-                    plt.close(fig_lorenz)
-                else:
-                    st.info("Insufficient data for Lorenz curve")
-            
-            with col2:
-                # 2. Top Journals
-                st.markdown("**2. Top Journals Analysis**")
-                fig_journals = create_top_journals_chart(st.session_state.results)
-                if fig_journals:
-                    st.pyplot(fig_journals)
-                    plt.close(fig_journals)
-                else:
-                    st.info("Insufficient journal data")
-            
-            col3, col4 = st.columns(2)
-            
-            with col3:
-                # 3. Citation Velocity
-                st.markdown("**3. Citation Velocity (Citations per Year)**")
-                fig_velocity = create_citation_velocity_chart(consistent_data)
-                if fig_velocity:
-                    st.pyplot(fig_velocity)
-                    plt.close(fig_velocity)
-                    
-                    # Add interpretation
-                    st.markdown("""
-                    <div style="font-size:0.8rem; color:#666; padding:5px;">
-                        <i>Higher values indicate "hotter" research areas that accumulate citations faster</i>
-                    </div>
-                    """, unsafe_allow_html=True)
-                else:
-                    st.info("Insufficient data for velocity analysis")
-            
-            with col4:
-                # 4. Highly Cited Papers Share
-                st.markdown("**4. Share of Highly-Cited Papers (>50 citations)**")
-                fig_highly_cited = create_highly_cited_share_chart(consistent_data, threshold=50)
-                if fig_highly_cited:
-                    st.pyplot(fig_highly_cited)
-                    plt.close(fig_highly_cited)
-                else:
-                    st.info("Insufficient data for highly-cited analysis")
-            
-            st.markdown('</div>', unsafe_allow_html=True)
-
-            # Correlation Heatmap
-            st.markdown('<div class="scientific-plot">', unsafe_allow_html=True)
-            st.markdown("<h4>📊 Topic Correlation Analysis</h4>", unsafe_allow_html=True)
-            
-            fig_heatmap = create_correlation_heatmap(consistent_data)
-            if fig_heatmap:
-                st.pyplot(fig_heatmap)
-                plt.close(fig_heatmap)
-                
-                st.markdown("""
-                <div style="font-size:0.8rem; color:#666; padding:5px;">
-                    <i>Red indicates positive correlation (similar patterns), blue indicates negative correlation (opposite patterns)</i>
-                </div>
-                """, unsafe_allow_html=True)
-            else:
-                st.info("Insufficient data for correlation heatmap (need at least 2 topics)")
-            
-            st.markdown('</div>', unsafe_allow_html=True)
-            
-            # Second row of advanced charts
-            st.markdown('<div class="scientific-plot">', unsafe_allow_html=True)
-            st.markdown("<h4>📈 Growth and Trend Analysis</h4>", unsafe_allow_html=True)
-            
-            col5, col6 = st.columns(2)
-            
-            with col5:
-                # 5. Relevance vs Citations Scatter
-                st.markdown("**5. Relevance Score vs Citation Impact**")
-                fig_scatter = create_relevance_vs_citations_scatter(consistent_data)
-                if fig_scatter:
-                    st.pyplot(fig_scatter)
-                    plt.close(fig_scatter)
-                else:
-                    st.info("Insufficient data for scatter plot")
-            
-            with col6:
-                # 6. CAGR Analysis
-                st.markdown("**6. Publication Growth Rate (CAGR)**")
-                fig_cagr = create_cagr_chart(consistent_data, st.session_state.years_input)
-                if fig_cagr:
-                    st.pyplot(fig_cagr)
-                    plt.close(fig_cagr)
-                else:
-                    st.info("Insufficient data for CAGR analysis")
-            
-            col7, col8 = st.columns(2)
-            
-            with col7:
-                # 7. Peak Year Analysis
-                st.markdown("**7. Peak Publication Year Analysis**")
-                fig_peak = create_peak_year_analysis(consistent_data)
-                if fig_peak:
-                    st.pyplot(fig_peak)
-                    plt.close(fig_peak)
-                else:
-                    st.info("Insufficient data for peak year analysis")
-            
-            with col8:
-                # 8. Open Access Share
-                st.markdown("**8. Open Access Analysis**")
-                fig_oa = create_open_access_share_chart(consistent_data, st.session_state.years_input)
-                if fig_oa:
-                    st.pyplot(fig_oa)
-                    plt.close(fig_oa)
-                else:
-                    st.info("Insufficient data for OA analysis")
-            
-            st.markdown('</div>', unsafe_allow_html=True)
-        
-        with tab4:
-            # Show papers by topic (was tab3)
             for term, works in st.session_state.results.items():
                 if works:
-                    with st.expander(f"📚 {term} - {len(works)} papers"):
-                        for i, work in enumerate(works[:10], 1):
+                    # Mark highly cited papers in this topic
+                    topic_highly_cited = [p for p in highly_cited_papers if p.get('topic') == term]
+                    
+                    with st.expander(f"📚 {term} - {len(works)} papers ({len(topic_highly_cited)} highly cited)"):
+                        for i, work in enumerate(works[:20], 1):
                             enriched = enrich_work_data(work)
+                            # Check if highly cited
+                            is_highly_cited = any(p.get('doi') == enriched.get('doi') for p in highly_cited_papers)
+                            if is_highly_cited:
+                                enriched['title'] = "⭐ " + enriched.get('title', '')
                             create_result_card(enriched, i, term)
                             
-                            if i < len(works[:10]):
+                            if i < len(works[:20]):
                                 st.markdown("---")
         
-        with tab5:
-            # Export (was tab4)
+        with tab3:
+            # Export (was tab4) - updated with highly cited papers
             st.markdown("### 📥 Export Results")
+            
+            highly_cited_papers = get_highly_cited_papers(st.session_state.results, percentile=85)
             
             col1, col2, col3 = st.columns(3)
             
@@ -3486,8 +3928,8 @@ def main():
                 )
             
             with col2:
-                # Excel export
-                excel_data = export_to_excel(st.session_state.results)
+                # Excel export with additional sheets
+                excel_data = export_to_excel(st.session_state.results, highly_cited_papers)
                 st.download_button(
                     label="📈 Download Excel",
                     data=excel_data,
@@ -3503,7 +3945,8 @@ def main():
                         st.session_state.results,
                         st.session_state.level1_input,
                         st.session_state.level2_input,
-                        st.session_state.years_input
+                        st.session_state.years_input,
+                        highly_cited_papers
                     )
                     if pdf_data:
                         st.download_button(
@@ -3529,6 +3972,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
