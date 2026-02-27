@@ -22,6 +22,7 @@ from ratelimit import limits, sleep_and_retry
 import logging
 import io
 from pathlib import Path
+from matplotlib.collections import LineCollection
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -39,6 +40,41 @@ try:
 except ImportError:
     PDF_AVAILABLE = False
     st.warning("reportlab not installed. PDF export will be disabled. Install with: pip install reportlab")
+
+# ============================================================================
+# SCIENTIFIC COLOR PALETTES FOR PUBLICATIONS
+# ============================================================================
+
+# Colorblind-friendly palettes for scientific publications
+COLOR_PALETTES_SCIENTIFIC = {
+    'nature': ['#E64B35', '#4DBBD5', '#00A087', '#3C5488', '#F39B7F', '#8491B4', '#91D1C2', '#DC0000', '#7E6148', '#B09C85'],
+    'science': ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'],
+    'matplotlib': ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'],
+    'colorblind': ['#0072B2', '#D55E00', '#009E73', '#CC79A7', '#F0E442', '#56B4E9', '#E69F00', '#000000', '#999999', '#882255'],
+    'vibrant': ['#EE7733', '#0077BB', '#33BBEE', '#EE3377', '#CC3311', '#009988', '#BBBBBB', '#999933', '#882255', '#AA4499']
+}
+
+# Gradient palettes for continuous data
+GRADIENT_PALETTES = {
+    'viridis': plt.cm.viridis,
+    'plasma': plt.cm.plasma,
+    'inferno': plt.cm.inferno,
+    'magma': plt.cm.magma,
+    'cividis': plt.cm.cividis,
+    'coolwarm': plt.cm.coolwarm,
+    'RdYlBu': plt.cm.RdYlBu,
+    'Spectral': plt.cm.Spectral
+}
+
+# Single color palettes for bar charts
+SINGLE_COLOR_PALETTES = {
+    'nature_blue': '#2C3E50',
+    'nature_green': '#27AE60',
+    'nature_red': '#E74C3C',
+    'nature_purple': '#8E44AD',
+    'nature_orange': '#F39C12',
+    'nature_teal': '#16A085'
+}
 
 # ============================================================================
 # PAGE CONFIGURATION
@@ -1229,10 +1265,99 @@ def create_lorenz_curve(all_works_by_topic: Dict[str, List[Dict]], title: str = 
     plt.tight_layout()
     return fig
 
+def create_lorenz_curve(all_works_by_topic: Dict[str, List[Dict]], title: str = "Citation Inequality (Lorenz Curve)"):
+    """Create Lorenz curve showing citation inequality with publication colors"""
+    # Collect all citations from all topics
+    all_citations = []
+    for topic, works in all_works_by_topic.items():
+        for work in works:
+            all_citations.append(work.get('cited_by_count', 0))
+    
+    if not all_citations:
+        return None
+    
+    # Sort citations
+    all_citations = np.sort(all_citations)
+    n = len(all_citations)
+    
+    # Calculate cumulative shares
+    cum_citations = np.cumsum(all_citations)
+    total_citations = cum_citations[-1] if cum_citations[-1] > 0 else 1
+    
+    # Population shares (x-axis)
+    population_share = np.arange(1, n + 1) / n
+    
+    # Citation shares (y-axis)
+    citation_share = cum_citations / total_citations
+    
+    # Calculate Gini coefficient for all papers combined
+    gini_all = calculate_gini_coefficient(all_citations)
+    
+    # Create figure
+    fig, ax = plt.subplots(figsize=(8, 8))
+    
+    # Apply scientific style
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['bottom'].set_linewidth(1.0)
+    ax.spines['left'].set_linewidth(1.0)
+    ax.tick_params(axis='both', which='major', labelsize=9)
+    
+    # Plot Lorenz curve with gradient
+    points = np.array([population_share, citation_share]).T.reshape(-1, 1, 2)
+    segments = np.concatenate([points[:-1], points[1:]], axis=1)
+    
+    # Create gradient along the curve
+    norm = plt.Normalize(0, len(segments))
+    lc = LineCollection(segments, cmap='viridis', norm=norm,
+                       linewidth=2.5, alpha=0.8)
+    lc.set_array(np.arange(len(segments)))
+    ax.add_collection(lc)
+    
+    # Plot equality line
+    ax.plot([0, 1], [0, 1], 'k--', linewidth=1.5, label='Perfect equality', alpha=0.7)
+    
+    # Fill area between curves with transparent gradient
+    ax.fill_between(population_share, population_share, citation_share, 
+                    alpha=0.2, color='gray', label=f'Gini = {gini_all:.3f}')
+    
+    ax.set_xlabel('Cumulative share of papers (from least to most cited)', fontsize=10, fontweight='bold')
+    ax.set_ylabel('Cumulative share of citations', fontsize=10, fontweight='bold')
+    ax.set_title(title, fontsize=11, fontweight='bold', pad=10)
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.legend(fontsize=9, frameon=True, edgecolor='black')
+    ax.grid(True, alpha=0.2, linestyle='--', color='gray')
+    
+    # Add colorbar
+    sm = plt.cm.ScalarMappable(cmap='viridis', norm=plt.Normalize(0, len(segments)))
+    sm.set_array([])
+    cbar = plt.colorbar(sm, ax=ax, pad=0.02)
+    cbar.set_label('Cumulative position', fontsize=9)
+    
+    # Add text box with interpretation
+    if gini_all > 0.6:
+        interpretation = "Very high inequality (Matthew effect)"
+        color = '#E74C3C'
+    elif gini_all > 0.4:
+        interpretation = "High inequality"
+        color = '#F39C12'
+    elif gini_all > 0.2:
+        interpretation = "Moderate inequality"
+        color = '#F1C40F'
+    else:
+        interpretation = "Low inequality"
+        color = '#27AE60'
+    
+    ax.text(0.05, 0.95, f"Interpretation: {interpretation}\nTotal papers: {n:,}\nTotal citations: {total_citations:,}", 
+            transform=ax.transAxes, fontsize=8, verticalalignment='top',
+            bbox=dict(boxstyle='round', facecolor=color, alpha=0.2, edgecolor=color))
+    
+    plt.tight_layout()
+    return fig
+
 def create_top_journals_chart(all_works_by_topic: Dict[str, List[Dict]], top_n: int = 10):
-    """
-    Create chart showing top journals by number of publications and their average citations
-    """
+    """Create chart showing top journals with publication colors"""
     # Collect journal data
     journal_data = defaultdict(lambda: {'count': 0, 'citations': [], 'topics': set()})
     
@@ -1270,7 +1395,8 @@ def create_top_journals_chart(all_works_by_topic: Dict[str, List[Dict]], top_n: 
     
     # Plot 1: Publication counts
     y_pos = np.arange(len(journals))
-    bars1 = ax1.barh(y_pos, counts, color='gray', edgecolor='black', linewidth=0.5)
+    colors1 = plt.cm.Blues(np.linspace(0.4, 0.9, len(journals)))
+    bars1 = ax1.barh(y_pos, counts, color=colors1, edgecolor='black', linewidth=0.5)
     ax1.set_yticks(y_pos)
     ax1.set_yticklabels(journals, fontsize=8)
     ax1.set_xlabel('Number of Publications', fontsize=10, fontweight='bold')
@@ -1279,29 +1405,30 @@ def create_top_journals_chart(all_works_by_topic: Dict[str, List[Dict]], top_n: 
     # Add values to bars
     for i, (bar, count, topics) in enumerate(zip(bars1, counts, topic_counts)):
         ax1.text(count + max(counts)*0.01, bar.get_y() + bar.get_height()/2, 
-                f'{count} ({topics} topics)', va='center', fontsize=7)
+                f'{count} ({topics} topics)', va='center', fontsize=7,
+                bbox=dict(boxstyle='round', facecolor='white', alpha=0.7, edgecolor='none'))
     
     # Plot 2: Average citations
-    bars2 = ax2.barh(y_pos, avg_citations, color='lightgray', edgecolor='black', linewidth=0.5)
+    colors2 = plt.cm.OrRd(np.linspace(0.3, 0.9, len(journals)))
+    bars2 = ax2.barh(y_pos, avg_citations, color=colors2, edgecolor='black', linewidth=0.5)
     ax2.set_yticks(y_pos)
-    ax2.set_yticklabels([])  # Remove labels
+    ax2.set_yticklabels([])
     ax2.set_xlabel('Average Citations per Paper', fontsize=10, fontweight='bold')
     ax2.set_title('B) Average Citations by Journal', fontsize=11, fontweight='bold', pad=10)
     
     # Add values to bars
     for i, (bar, avg_cit) in enumerate(zip(bars2, avg_citations)):
         ax2.text(avg_cit + max(avg_citations)*0.01, bar.get_y() + bar.get_height()/2, 
-                f'{avg_cit:.1f}', va='center', fontsize=8)
+                f'{avg_cit:.1f}', va='center', fontsize=8,
+                bbox=dict(boxstyle='round', facecolor='white', alpha=0.7, edgecolor='none'))
     
     plt.suptitle(f'Top {top_n} Journals Analysis', fontsize=12, fontweight='bold', y=1.02)
     plt.tight_layout()
     
     return fig
-
+    
 def create_citation_velocity_chart(consistent_data: Dict[str, Dict], current_year: int = None):
-    """
-    Create chart showing citation velocity (citations per year) for each topic
-    """
+    """Create chart showing citation velocity with gradient colors"""
     if current_year is None:
         current_year = datetime.now().year
     
@@ -1313,8 +1440,6 @@ def create_citation_velocity_chart(consistent_data: Dict[str, Dict], current_yea
         if data['citation_stats'] and 'mean_velocity' in data['citation_stats']:
             topics.append(topic)
             velocities.append(data['citation_stats']['mean_velocity'])
-            # Use standard deviation or quartiles for error bars if available
-            # For now, use a simple estimate
             errors.append(data['citation_stats'].get('mean_velocity', 0) * 0.2)
     
     if not topics:
@@ -1335,11 +1460,15 @@ def create_citation_velocity_chart(consistent_data: Dict[str, Dict], current_yea
     ax.spines['left'].set_linewidth(1.0)
     ax.tick_params(axis='both', which='major', labelsize=9)
     
+    # Create gradient colors based on velocity
+    norm = plt.Normalize(min(velocities), max(velocities))
+    colors = plt.cm.RdYlGn(norm(velocities))  # Red (low) to Green (high)
+    
     # Create bar chart with error bars
     x_pos = np.arange(len(topics))
     bars = ax.bar(x_pos, velocities, yerr=errors, capsize=5, 
-                  color='gray', edgecolor='black', linewidth=0.5, 
-                  error_kw={'ecolor': 'black', 'linewidth': 1})
+                  color=colors, edgecolor='black', linewidth=0.5, 
+                  error_kw={'ecolor': 'black', 'linewidth': 1, 'capsize': 3})
     
     ax.set_xticks(x_pos)
     ax.set_xticklabels(topics, rotation=45, ha='right', fontsize=9)
@@ -1351,13 +1480,21 @@ def create_citation_velocity_chart(consistent_data: Dict[str, Dict], current_yea
     # Add values on bars
     for i, (bar, vel) in enumerate(zip(bars, velocities)):
         ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max(velocities)*0.02,
-                f'{vel:.2f}', ha='center', va='bottom', fontsize=8)
+                f'{vel:.2f}', ha='center', va='bottom', fontsize=8, fontweight='bold',
+                bbox=dict(boxstyle='round', facecolor='white', alpha=0.7, edgecolor='none'))
     
     # Add reference line for average
     avg_velocity = np.mean(velocities)
-    ax.axhline(avg_velocity, color='red', linestyle='--', linewidth=1, 
+    ax.axhline(avg_velocity, color='black', linestyle='--', linewidth=1.5, 
                label=f'Average: {avg_velocity:.2f}')
-    ax.legend(fontsize=8, frameon=True, edgecolor='black')
+    
+    # Add colorbar
+    sm = plt.cm.ScalarMappable(cmap='RdYlGn', norm=norm)
+    sm.set_array([])
+    cbar = plt.colorbar(sm, ax=ax, pad=0.02)
+    cbar.set_label('Velocity (citations/year)', fontsize=9)
+    
+    ax.legend(fontsize=8, frameon=True, edgecolor='black', loc='upper right')
     
     plt.tight_layout()
     return fig
@@ -1763,8 +1900,54 @@ def create_open_access_share_chart(consistent_data: Dict[str, Dict], years: List
     plt.tight_layout()
     return fig
 
+def create_correlation_heatmap(consistent_data: Dict[str, Dict]):
+    """Create correlation heatmap between topics based on yearly patterns"""
+    topics = [t for t, data in consistent_data.items() if data['total'] > 0]
+    if len(topics) < 2:
+        return None
+    
+    # Create matrix of yearly patterns
+    years = sorted(set().union(*[set(data['yearly'].keys()) for data in consistent_data.values()]))
+    patterns = []
+    
+    for topic in topics:
+        pattern = [consistent_data[topic]['yearly'].get(year, 0) for year in years]
+        patterns.append(pattern)
+    
+    # Calculate correlation matrix
+    corr_matrix = np.corrcoef(patterns)
+    
+    # Create heatmap
+    fig, ax = plt.subplots(figsize=(10, 8))
+    
+    # Create heatmap with colormap
+    im = ax.imshow(corr_matrix, cmap='RdBu_r', vmin=-1, vmax=1, aspect='auto')
+    
+    # Add labels
+    ax.set_xticks(np.arange(len(topics)))
+    ax.set_yticks(np.arange(len(topics)))
+    ax.set_xticklabels(topics, rotation=45, ha='right', fontsize=8)
+    ax.set_yticklabels(topics, fontsize=8)
+    
+    # Add correlation values
+    for i in range(len(topics)):
+        for j in range(len(topics)):
+            text = ax.text(j, i, f'{corr_matrix[i, j]:.2f}',
+                          ha='center', va='center', color='white' if abs(corr_matrix[i, j]) > 0.5 else 'black',
+                          fontsize=7, fontweight='bold')
+    
+    # Add colorbar
+    cbar = plt.colorbar(im, ax=ax, pad=0.02)
+    cbar.set_label('Pearson Correlation', fontsize=9)
+    
+    ax.set_title('Topic Correlation Heatmap\n(Based on yearly publication patterns)', 
+                fontsize=11, fontweight='bold', pad=10)
+    
+    plt.tight_layout()
+    return fig
+
 def create_scientific_bar_chart(data: Dict[str, int], level2_count: int, title: str):
-    """Create scientific bar chart with matplotlib"""
+    """Create scientific bar chart with publication-quality colors"""
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
     
     # Apply scientific style
@@ -1790,12 +1973,12 @@ def create_scientific_bar_chart(data: Dict[str, int], level2_count: int, title: 
     counts = [counts[i] for i in sorted_idx]
     percentages = [percentages[i] for i in sorted_idx]
     
-    # Grayscale colors for scientific style
-    colors1 = plt.cm.Greys(np.linspace(0.3, 0.7, len(topics)))
-    colors2 = plt.cm.Greys(np.linspace(0.4, 0.8, len(topics)))
+    # Use vibrant color palette
+    colors_count = plt.cm.viridis(np.linspace(0.2, 0.9, len(topics)))
+    colors_pct = plt.cm.plasma(np.linspace(0.2, 0.9, len(topics)))
     
     # Count plot
-    bars1 = ax1.barh(range(len(topics)), counts, color=colors1, edgecolor='black', linewidth=0.5)
+    bars1 = ax1.barh(range(len(topics)), counts, color=colors_count, edgecolor='black', linewidth=0.5)
     ax1.set_yticks(range(len(topics)))
     ax1.set_yticklabels(topics, fontsize=9)
     ax1.set_xlabel('Number of Publications', fontsize=10, fontweight='bold')
@@ -1807,7 +1990,7 @@ def create_scientific_bar_chart(data: Dict[str, int], level2_count: int, title: 
                 f'{count:,}', va='center', fontsize=8)
     
     # Percentage plot
-    bars2 = ax2.barh(range(len(topics)), percentages, color=colors2, edgecolor='black', linewidth=0.5)
+    bars2 = ax2.barh(range(len(topics)), percentages, color=colors_pct, edgecolor='black', linewidth=0.5)
     ax2.set_yticks(range(len(topics)))
     ax2.set_yticklabels([])  # Remove labels as they're on first plot
     ax2.set_xlabel('Percentage of Total (%)', fontsize=10, fontweight='bold')
@@ -1824,9 +2007,7 @@ def create_scientific_bar_chart(data: Dict[str, int], level2_count: int, title: 
     return fig
 
 def create_yearly_distribution_chart(yearly_data: Dict[int, int], title: str):
-    """
-    Create yearly distribution chart based on provided data
-    """
+    """Create yearly distribution chart with gradient colors"""
     fig, ax = plt.subplots(figsize=(10, 5))
     
     # Apply scientific style
@@ -1840,8 +2021,12 @@ def create_yearly_distribution_chart(yearly_data: Dict[int, int], title: str):
     years_sorted = sorted([int(y) for y in yearly_data.keys()])
     counts = [yearly_data[y] for y in years_sorted]
     
-    # Create bar chart with proper years
-    bars = ax.bar(years_sorted, counts, color='gray', edgecolor='black', linewidth=0.5, width=0.8)
+    # Create color gradient based on count values
+    norm = plt.Normalize(min(counts) if min(counts) > 0 else 0, max(counts))
+    colors = plt.cm.viridis(norm(counts))
+    
+    # Create bar chart with gradient colors
+    bars = ax.bar(years_sorted, counts, color=colors, edgecolor='black', linewidth=0.5, width=0.8)
     
     # Set integer labels on X axis
     ax.set_xticks(years_sorted)
@@ -1857,22 +2042,26 @@ def create_yearly_distribution_chart(yearly_data: Dict[int, int], title: str):
             height = bar.get_height()
             if height > 0:  # Only show positive values
                 ax.text(bar.get_x() + bar.get_width()/2., height + max(counts)*0.01,
-                       f'{int(height):,}', ha='center', va='bottom', fontsize=8)
+                       f'{int(height):,}', ha='center', va='bottom', fontsize=8, 
+                       color='black', fontweight='bold')
+    
+    # Add colorbar
+    sm = plt.cm.ScalarMappable(cmap='viridis', norm=norm)
+    sm.set_array([])
+    cbar = plt.colorbar(sm, ax=ax, pad=0.02)
+    cbar.set_label('Publication Intensity', fontsize=9)
     
     # Add total count
     total = sum(counts)
     ax.text(0.98, 0.98, f'Total: {total:,}', transform=ax.transAxes, 
             ha='right', va='top', fontsize=9, fontweight='bold',
-            bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+            bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='black'))
     
     plt.tight_layout()
     return fig
 
 def create_citation_distribution_chart(works_or_stats, title: str, is_stats: bool = False, is_full_distribution: bool = False):
-    """
-    Create citation distribution chart
-    Enhanced to handle both top_works stats and full distribution from group_by
-    """
+    """Create citation distribution chart with publication-quality colors"""
     fig, ax = plt.subplots(figsize=(10, 5))
     
     # Apply scientific style
@@ -1884,7 +2073,7 @@ def create_citation_distribution_chart(works_or_stats, title: str, is_stats: boo
     
     if is_full_distribution:
         # For full citation distribution from group_by
-        dist = works_or_stats  # This is the citation_distribution dict
+        dist = works_or_stats
         categories = list(dist.keys())
         counts = list(dist.values())
         total = sum(counts)
@@ -1892,8 +2081,11 @@ def create_citation_distribution_chart(works_or_stats, title: str, is_stats: boo
         # Calculate percentages
         percentages = [(c / total * 100) if total > 0 else 0 for c in counts]
         
+        # Use color palette based on citation impact
+        colors = plt.cm.RdYlGn_r(np.linspace(0.2, 0.8, len(categories)))
+        
         # Create bar chart
-        bars = ax.bar(categories, counts, color='gray', edgecolor='black', linewidth=0.5)
+        bars = ax.bar(categories, counts, color=colors, edgecolor='black', linewidth=0.5)
         ax.set_xlabel('Citation Categories', fontsize=10, fontweight='bold')
         ax.set_ylabel('Number of Papers', fontsize=10, fontweight='bold')
         
@@ -1901,20 +2093,29 @@ def create_citation_distribution_chart(works_or_stats, title: str, is_stats: boo
         for bar, count, pct in zip(bars, counts, percentages):
             if count > 0:
                 ax.text(bar.get_x() + bar.get_width()/2., bar.get_height(),
-                       f'{count:,}\n({pct:.1f}%)', ha='center', va='bottom', fontsize=7)
+                       f'{count:,}\n({pct:.1f}%)', ha='center', va='bottom', 
+                       fontsize=7, fontweight='bold')
+        
+        # Add colorbar
+        sm = plt.cm.ScalarMappable(cmap='RdYlGn_r', norm=plt.Normalize(0, max(counts)))
+        sm.set_array([])
+        cbar = plt.colorbar(sm, ax=ax, pad=0.02)
+        cbar.set_label('Citation Impact', fontsize=9)
         
         # Add total
         ax.text(0.98, 0.98, f'Total: {total:,} papers', transform=ax.transAxes,
                 ha='right', va='top', fontsize=9, fontweight='bold',
-                bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+                bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='black'))
         
     elif is_stats:
-        # For citation stats from top_works (backward compatibility)
+        # For citation stats from top_works
         dist = works_or_stats.get('distribution', {})
         categories = list(dist.keys())
         counts = list(dist.values())
         
-        bars = ax.bar(categories, counts, color='gray', edgecolor='black', linewidth=0.5)
+        colors = plt.cm.coolwarm(np.linspace(0.2, 0.8, len(categories)))
+        
+        bars = ax.bar(categories, counts, color=colors, edgecolor='black', linewidth=0.5)
         ax.set_xlabel('Citation Categories', fontsize=10, fontweight='bold')
         ax.set_ylabel('Number of Papers', fontsize=10, fontweight='bold')
         
@@ -1922,13 +2123,13 @@ def create_citation_distribution_chart(works_or_stats, title: str, is_stats: boo
         for bar, count in zip(bars, counts):
             if count > 0:
                 ax.text(bar.get_x() + bar.get_width()/2., bar.get_height(),
-                       f'{count:,}', ha='center', va='bottom', fontsize=8)
+                       f'{count:,}', ha='center', va='bottom', fontsize=8, fontweight='bold')
         
         # Add note about sample
         total = sum(counts)
         ax.text(0.98, 0.98, f'Sample: {total} papers', transform=ax.transAxes,
                 ha='right', va='top', fontsize=8, fontstyle='italic',
-                bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+                bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='black'))
         
     else:
         # For raw works list
@@ -1936,26 +2137,37 @@ def create_citation_distribution_chart(works_or_stats, title: str, is_stats: boo
         if not citations:
             return None
         
-        # Create histogram
-        n, bins, patches = ax.hist(citations, bins=20, color='gray', 
-                                   edgecolor='black', linewidth=0.5, alpha=0.7)
+        # Create histogram with gradient
+        n, bins, patches = ax.hist(citations, bins=20, edgecolor='black', 
+                                   linewidth=0.5, alpha=0.8)
+        
+        # Color bars by height
+        cmap = plt.cm.viridis
+        for i, (patch, height) in enumerate(zip(patches, n)):
+            patch.set_facecolor(cmap(height / max(n)))
         
         ax.set_xlabel('Number of Citations', fontsize=10, fontweight='bold')
         ax.set_ylabel('Number of Papers', fontsize=10, fontweight='bold')
         
-        # Add statistics
+        # Add statistics with colored lines
         mean_cit = np.mean(citations)
         median_cit = np.median(citations)
-        ax.axvline(mean_cit, color='black', linestyle='--', linewidth=1, 
+        ax.axvline(mean_cit, color='red', linestyle='--', linewidth=2, 
                   label=f'Mean: {mean_cit:.1f}')
-        ax.axvline(median_cit, color='gray', linestyle=':', linewidth=1, 
+        ax.axvline(median_cit, color='blue', linestyle=':', linewidth=2, 
                   label=f'Median: {median_cit:.1f}')
         ax.legend(fontsize=8, frameon=True, edgecolor='black')
+        
+        # Add colorbar
+        sm = plt.cm.ScalarMappable(cmap='viridis', norm=plt.Normalize(0, max(n)))
+        sm.set_array([])
+        cbar = plt.colorbar(sm, ax=ax, pad=0.02)
+        cbar.set_label('Frequency', fontsize=9)
         
         # Add sample size
         ax.text(0.98, 0.98, f'Sample: {len(citations)} papers', transform=ax.transAxes,
                 ha='right', va='top', fontsize=8, fontstyle='italic',
-                bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+                bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='black'))
     
     ax.set_title(title, fontsize=11, fontweight='bold', pad=10)
     plt.tight_layout()
@@ -1964,10 +2176,7 @@ def create_citation_distribution_chart(works_or_stats, title: str, is_stats: boo
 def create_combined_yearly_charts(consistent_data: Dict[str, Dict], 
                                  years_input: List[int], 
                                  level2_term: Optional[str] = None):
-    """
-    Create combined chart with yearly distributions for all sub-topics
-    Uses CONSISTENT data from group_by
-    """
+    """Create combined chart with yearly distributions using publication colors"""
     # Create figure with three subplots
     fig, axes = plt.subplots(1, 3, figsize=(18, 6))
     
@@ -1987,12 +2196,14 @@ def create_combined_yearly_charts(consistent_data: Dict[str, Dict],
         plt.close(fig)
         return None
     
+    # Use vibrant color palette for topics
+    topic_colors = plt.cm.tab10(np.linspace(0, 1, len(topics)))
+    if len(topics) > 10:
+        topic_colors = plt.cm.viridis(np.linspace(0, 1, len(topics)))
+    
     # Subplot 1: Stacked
     ax = axes[0]
     bottom = np.zeros(len(years))
-    
-    # Use grayscale for scientific style
-    gray_colors = plt.cm.Greys(np.linspace(0.3, 0.7, len(topics)))
     
     # Create list to store yearly totals for validation
     yearly_totals = np.zeros(len(years))
@@ -2003,7 +2214,8 @@ def create_combined_yearly_charts(consistent_data: Dict[str, Dict],
         counts = [topic_yearly.get(year, 0) for year in years]
         
         ax.bar(years, counts, bottom=bottom, label=topic, 
-               color=gray_colors[idx], edgecolor='black', linewidth=0.5, width=0.8)
+               color=topic_colors[idx], edgecolor='black', linewidth=0.5, width=0.8,
+               alpha=0.8)
         bottom += counts
         yearly_totals += counts
     
@@ -2014,13 +2226,14 @@ def create_combined_yearly_charts(consistent_data: Dict[str, Dict],
     ax.set_xlabel('Publication Year', fontsize=10, fontweight='bold')
     ax.set_ylabel('Number of Publications', fontsize=10, fontweight='bold')
     ax.set_title('A) Stacked Yearly Distribution', fontsize=11, fontweight='bold', pad=10)
-    ax.legend(fontsize=8, frameon=True, edgecolor='black')
+    ax.legend(fontsize=8, frameon=True, edgecolor='black', loc='upper left')
     
     # Add total count above plot
     total_papers = int(sum(yearly_totals))
     ax.text(0.5, 0.98, f'Total: {total_papers:,} papers', 
             transform=ax.transAxes, ha='center', va='top', 
-            fontsize=9, fontweight='bold', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+            fontsize=9, fontweight='bold', 
+            bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='black'))
     
     # Subplot 2: Normalized (by maximum of each topic)
     ax = axes[1]
@@ -2030,8 +2243,9 @@ def create_combined_yearly_charts(consistent_data: Dict[str, Dict],
         counts = np.array([topic_yearly.get(year, 0) for year in years])
         if counts.max() > 0:
             normalized = counts / counts.max()
-            ax.plot(years, normalized, marker='o', linewidth=1.5, markersize=4, 
-                   label=topic, color=gray_colors[idx])
+            ax.plot(years, normalized, marker='o', linewidth=2, markersize=6, 
+                   label=topic, color=topic_colors[idx], markerfacecolor='white',
+                   markeredgewidth=1.5, markeredgecolor=topic_colors[idx])
     
     ax.set_xticks(years)
     ax.set_xticklabels([str(y) for y in years], rotation=45, ha='right')
@@ -2040,8 +2254,8 @@ def create_combined_yearly_charts(consistent_data: Dict[str, Dict],
     ax.set_ylabel('Normalized Intensity (max=1)', fontsize=10, fontweight='bold')
     ax.set_title('B) Normalized by Maximum', fontsize=11, fontweight='bold', pad=10)
     ax.set_ylim(0, 1.1)
-    ax.legend(fontsize=8, frameon=True, edgecolor='black')
-    ax.grid(True, alpha=0.3, linestyle='--')
+    ax.legend(fontsize=8, frameon=True, edgecolor='black', loc='upper left')
+    ax.grid(True, alpha=0.3, linestyle='--', color='gray')
     
     # Subplot 3: Logarithmic scale (absolute values)
     ax = axes[2]
@@ -2060,15 +2274,16 @@ def create_combined_yearly_charts(consistent_data: Dict[str, Dict],
         if max(counts) > 0:
             # For log scale, replace 0 with 0.1 (below minimum)
             counts_log = [c if c > 0 else 0.1 for c in counts]
-            ax.semilogy(years, counts_log, marker='s', linewidth=1.5, markersize=4, 
-                       label=topic, color=gray_colors[idx])
+            ax.semilogy(years, counts_log, marker='s', linewidth=2, markersize=6,
+                       label=topic, color=topic_colors[idx], markerfacecolor='white',
+                       markeredgewidth=1.5, markeredgecolor=topic_colors[idx])
     
     ax.set_xticks(years)
     ax.set_xticklabels([str(y) for y in years], rotation=45, ha='right')
     
     ax.set_xlabel('Publication Year', fontsize=10, fontweight='bold')
     ax.set_ylabel('Number of Publications (log scale)', fontsize=10, fontweight='bold')
-    ax.set_title('C) Logarithmic Scale (absolute values)', fontsize=11, fontweight='bold', pad=10)
+    ax.set_title('C) Logarithmic Scale', fontsize=11, fontweight='bold', pad=10)
     
     # Configure logarithmic Y scale
     y_min = 0.5
@@ -2076,7 +2291,7 @@ def create_combined_yearly_charts(consistent_data: Dict[str, Dict],
     ax.set_ylim(y_min, y_max)
     
     # Add grid lines for log scale
-    ax.grid(True, alpha=0.3, linestyle='--', which='both')
+    ax.grid(True, alpha=0.3, linestyle='--', which='both', color='gray')
     ax.legend(fontsize=8, frameon=True, edgecolor='black', loc='best')
     
     plt.suptitle(f'Comparative Yearly Distribution Analysis' + (f' (with {level2_term})' if level2_term else ''), 
@@ -3171,6 +3386,25 @@ def main():
                     st.info("Insufficient data for highly-cited analysis")
             
             st.markdown('</div>', unsafe_allow_html=True)
+
+            # Correlation Heatmap
+            st.markdown('<div class="scientific-plot">', unsafe_allow_html=True)
+            st.markdown("<h4>📊 Topic Correlation Analysis</h4>", unsafe_allow_html=True)
+            
+            fig_heatmap = create_correlation_heatmap(consistent_data)
+            if fig_heatmap:
+                st.pyplot(fig_heatmap)
+                plt.close(fig_heatmap)
+                
+                st.markdown("""
+                <div style="font-size:0.8rem; color:#666; padding:5px;">
+                    <i>Red indicates positive correlation (similar patterns), blue indicates negative correlation (opposite patterns)</i>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.info("Insufficient data for correlation heatmap (need at least 2 topics)")
+            
+            st.markdown('</div>', unsafe_allow_html=True)
             
             # Second row of advanced charts
             st.markdown('<div class="scientific-plot">', unsafe_allow_html=True)
@@ -3295,5 +3529,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
