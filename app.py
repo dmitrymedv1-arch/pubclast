@@ -3961,16 +3961,100 @@ def main():
                 else:
                     st.warning("PDF export requires reportlab. Install with: pip install reportlab")
                     st.button("📄 PDF Report", disabled=True, use_container_width=True)
-    
-    # Footer
-    st.markdown(f"""
-    <div style="text-align: center; color: #888; font-size: 0.8rem; margin-top: 1rem;">
-        <p>© Publication Clustering | Theme: {ui_colors['name']}</p>
-    </div>
-    """, unsafe_allow_html=True)
+        
+        with tab4:
+            # New tab: Advanced Bibliometrics (5 additional graphs)
+            st.markdown('<div class="scientific-plot">', unsafe_allow_html=True)
+            st.markdown("<h4>📊 Advanced Bibliometric Analysis</h4>", unsafe_allow_html=True)
+            
+            # Create 2x3 grid for 6 graphs
+            col_a1, col_a2 = st.columns(2)
+            
+            with col_a1:
+                # Graph 1: Matthew Effect Analysis
+                st.markdown("**1. Matthew Effect Analysis**")
+                fig_matthew = create_matthew_effect_analysis(consistent_data)
+                if fig_matthew:
+                    st.pyplot(fig_matthew)
+                    plt.close(fig_matthew)
+                else:
+                    st.info("Insufficient data for Matthew effect analysis")
+            
+            with col_a2:
+                # Graph 2: Citation Half-Life
+                st.markdown("**2. Citation Half-Life Analysis**")
+                fig_half_life = create_citation_half_life(consistent_data)
+                if fig_half_life:
+                    st.pyplot(fig_half_life)
+                    plt.close(fig_half_life)
+                else:
+                    st.info("Insufficient data for half-life analysis")
+            
+            # Second row
+            col_b1, col_b2 = st.columns(2)
+            
+            with col_b1:
+                # Graph 3: Collaboration Intensity
+                st.markdown("**3. Collaboration Network Intensity**")
+                fig_collab = create_collaboration_intensity(consistent_data, st.session_state.years_input)
+                if fig_collab:
+                    st.pyplot(fig_collab)
+                    plt.close(fig_collab)
+                else:
+                    st.info("Insufficient data for collaboration analysis")
+            
+            with col_b2:
+                # Graph 4: Journal Impact Analysis
+                st.markdown("**4. Journal Impact vs Citation Performance**")
+                fig_journal_impact = create_journal_if_vs_citations(consistent_data)
+                if fig_journal_impact:
+                    st.pyplot(fig_journal_impact)
+                    plt.close(fig_journal_impact)
+                else:
+                    st.info("Insufficient journal data for analysis")
+            
+            # Third row
+            col_c1, col_c2 = st.columns(2)
+            
+            with col_c1:
+                # Graph 5: Research Front Velocity
+                st.markdown("**5. Research Front Velocity**")
+                fig_front = create_research_front_velocity(consistent_data)
+                if fig_front:
+                    st.pyplot(fig_front)
+                    plt.close(fig_front)
+                else:
+                    st.info("Insufficient data for research front analysis")
+            
+            with col_c2:
+                # Graph 6: Lorenz Curve (overall citation inequality)
+                st.markdown("**6. Overall Citation Inequality (Lorenz Curve)**")
+                fig_lorenz = create_lorenz_curve(st.session_state.results, 
+                                                 "Citation Distribution - All Topics Combined")
+                if fig_lorenz:
+                    st.pyplot(fig_lorenz)
+                    plt.close(fig_lorenz)
+                else:
+                    st.info("Insufficient data for Lorenz curve analysis")
+            
+            # Add interpretation guide
+            st.markdown("""
+            <div class="info-message" style="margin-top: 20px;">
+                <strong>📈 Interpretation Guide:</strong><br>
+                • <b>Matthew Effect:</b> Shows concentration of citations - higher concentration indicates "rich get richer" phenomenon<br>
+                • <b>Citation Half-Life:</b> Median age of cited papers - longer half-life indicates slower knowledge obsolescence<br>
+                • <b>Collaboration Intensity:</b> Average authors per paper over time - increasing trend suggests growing team science<br>
+                • <b>Journal Impact:</b> Relationship between publication volume and citation impact<br>
+                • <b>Research Front Velocity:</b> Share of recent papers - higher values indicate "hotter" research areas<br>
+                • <b>Lorenz Curve:</b> Visual representation of citation inequality - greater deviation from diagonal = higher inequality
+            </div>
+            """, unsafe_allow_html=True)
+            
+            st.markdown('</div>', unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
+
 
 
 
