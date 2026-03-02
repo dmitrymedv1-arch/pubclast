@@ -1080,13 +1080,26 @@ def calculate_percentile_threshold(citations: List[int], percentile: float = 85)
 def get_highly_cited_papers(works_by_topic: Dict[str, List[Dict]], percentile: float = 85) -> List[Dict]:
     """
     Get papers above the given citation percentile.
+    Returns ONLY UNIQUE papers (no duplicates) based on DOI or work ID.
     """
     all_papers = []
+    seen_ids = set()  # Track unique papers by ID or DOI
+    
     for topic, works in works_by_topic.items():
         for work in works:
             enriched = enrich_work_data(work)
-            enriched['topic'] = topic
-            all_papers.append(enriched)
+            
+            # Create unique identifier (use DOI if available, otherwise work ID)
+            paper_id = enriched.get('doi', enriched.get('id', ''))
+            if not paper_id:
+                # If no DOI or ID, use title as fallback (less reliable)
+                paper_id = enriched.get('title', '')
+            
+            # Only add if not seen before
+            if paper_id and paper_id not in seen_ids:
+                enriched['topic'] = topic
+                all_papers.append(enriched)
+                seen_ids.add(paper_id)
     
     if not all_papers:
         return []
@@ -1095,7 +1108,47 @@ def get_highly_cited_papers(works_by_topic: Dict[str, List[Dict]], percentile: f
     threshold = calculate_percentile_threshold(citations, percentile)
     
     highly_cited = [p for p in all_papers if p.get('cited_by_count', 0) >= threshold]
-    return sorted(highly_cited, key=lambda x: x.get('cited_by_count', 0), reverse=True)
+    
+    # Sort by citations descending
+    highly_cited_sorted = sorted(highly_cited, key=lambda x: x.get('cited_by_count', 0), reverse=True)
+    
+    return highly_cited_sorted
+
+def get_unique_top_fwci_papers(works_by_topic: Dict[str, List[Dict]], top_n: int = 100) -> List[Dict]:
+    """
+    Get top N papers by Field-Weighted Citation Impact (FWCI).
+    Returns ONLY UNIQUE papers (no duplicates) based on DOI or work ID.
+    """
+    all_papers = []
+    seen_ids = set()  # Track unique papers by ID or DOI
+    
+    for topic, works in works_by_topic.items():
+        for work in works:
+            enriched = enrich_work_data(work)
+            
+            # Only include papers with valid FWCI
+            if enriched.get('fwci') is not None and enriched.get('fwci') > 0:
+                
+                # Create unique identifier (use DOI if available, otherwise work ID)
+                paper_id = enriched.get('doi', enriched.get('id', ''))
+                if not paper_id:
+                    # If no DOI or ID, use title as fallback (less reliable)
+                    paper_id = enriched.get('title', '')
+                
+                # Only add if not seen before
+                if paper_id and paper_id not in seen_ids:
+                    enriched['topic'] = topic
+                    all_papers.append(enriched)
+                    seen_ids.add(paper_id)
+    
+    if not all_papers:
+        return []
+    
+    # Sort by FWCI descending
+    all_papers_sorted = sorted(all_papers, key=lambda x: x.get('fwci', 0), reverse=True)
+    
+    # Return top N unique papers
+    return all_papers_sorted[:top_n]
 
 def calculate_gini_coefficient(citations: List[int]) -> float:
     """
@@ -2838,11 +2891,19 @@ def export_to_excel(works_by_topic: Dict[str, List[Dict]], highly_cited_papers: 
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         # Main sheet - собираем все статьи
         all_rows = []
+        seen_main = set()  # Track unique papers for main sheet
+        
         for topic, works in works_by_topic.items():
             for work in works:
                 enriched = enrich_work_data(work)
-                enriched['sub_topic'] = topic
-                all_rows.append(enriched)
+                
+                # Check for duplicates in main sheet
+                paper_id = enriched.get('doi', enriched.get('id', enriched.get('title', '')))
+                
+                if paper_id not in seen_main:
+                    enriched['sub_topic'] = topic
+                    all_rows.append(enriched)
+                    seen_main.add(paper_id)
         
         if all_rows:
             df_all = pd.DataFrame(all_rows)
@@ -2855,13 +2916,21 @@ def export_to_excel(works_by_topic: Dict[str, List[Dict]], highly_cited_papers: 
             
             df_all.to_excel(writer, sheet_name='All Papers', index=False)
         
-        # Separate sheets for each sub-topic
+        # Separate sheets for each sub-topic (within a topic, duplicates are fine as they're the same paper)
         for topic, works in works_by_topic.items():
             if works:
                 topic_rows = []
+                seen_topic = set()  # Track unique papers within this topic sheet
+                
                 for work in works:
                     enriched = enrich_work_data(work)
-                    topic_rows.append(enriched)
+                    
+                    # Check for duplicates within this topic
+                    paper_id = enriched.get('doi', enriched.get('id', enriched.get('title', '')))
+                    
+                    if paper_id not in seen_topic:
+                        topic_rows.append(enriched)
+                        seen_topic.add(paper_id)
                 
                 df_topic = pd.DataFrame(topic_rows)
                 df_topic = df_topic.sort_values(
@@ -2872,8 +2941,9 @@ def export_to_excel(works_by_topic: Dict[str, List[Dict]], highly_cited_papers: 
                 sheet_name = re.sub(r'[^\w\s-]', '', topic)[:31]
                 df_topic.to_excel(writer, sheet_name=sheet_name, index=False)
         
-        # 4.6. Highly cited papers sheet (85th percentile)
+        # 4.6. Highly cited papers sheet (85th percentile) - USING UNIQUE PAPERS
         if highly_cited_papers:
+            # highly_cited_papers should already be unique from get_highly_cited_papers
             df_highly_cited = pd.DataFrame(highly_cited_papers)
             if not df_highly_cited.empty:
                 df_highly_cited = df_highly_cited.sort_values(
@@ -2882,18 +2952,12 @@ def export_to_excel(works_by_topic: Dict[str, List[Dict]], highly_cited_papers: 
                 )
                 df_highly_cited.to_excel(writer, sheet_name=f'Highly Cited (85th pct)', index=False)
         
-        # 4.6. Top 100 papers by Field-Weighted Citation Impact
-        all_papers_with_fwci = []
-        for topic, works in works_by_topic.items():
-            for work in works:
-                enriched = enrich_work_data(work)
-                if enriched.get('fwci') is not None:
-                    enriched['sub_topic'] = topic
-                    all_papers_with_fwci.append(enriched)
+        # 4.6. Top 100 papers by Field-Weighted Citation Impact - USING UNIQUE PAPERS
+        top_fwci_papers = get_unique_top_fwci_papers(works_by_topic, top_n=100)
         
-        if all_papers_with_fwci:
-            df_fwci = pd.DataFrame(all_papers_with_fwci)
-            df_fwci = df_fwci.sort_values(by=['fwci'], ascending=[False]).head(100)
+        if top_fwci_papers:
+            df_fwci = pd.DataFrame(top_fwci_papers)
+            df_fwci = df_fwci.sort_values(by=['fwci'], ascending=[False])
             df_fwci.to_excel(writer, sheet_name='Top 100 by FWCI', index=False)
         
         # Formatting
@@ -2911,15 +2975,20 @@ def export_to_excel(works_by_topic: Dict[str, List[Dict]], highly_cited_papers: 
                 df = df_all
             elif sheet_name == 'Highly Cited (85th pct)' and highly_cited_papers:
                 df = pd.DataFrame(highly_cited_papers)
-            elif sheet_name == 'Top 100 by FWCI' and all_papers_with_fwci:
-                df = df_fwci
+            elif sheet_name == 'Top 100 by FWCI' and top_fwci_papers:
+                df = pd.DataFrame(top_fwci_papers)
             else:
                 df = None
                 for t, works in works_by_topic.items():
                     if re.sub(r'[^\w\s-]', '', t)[:31] == sheet_name:
                         temp_rows = []
+                        seen_temp = set()
                         for work in works:
-                            temp_rows.append(enrich_work_data(work))
+                            enriched = enrich_work_data(work)
+                            paper_id = enriched.get('doi', enriched.get('id', enriched.get('title', '')))
+                            if paper_id not in seen_temp:
+                                temp_rows.append(enriched)
+                                seen_temp.add(paper_id)
                         df = pd.DataFrame(temp_rows)
                         df = df.sort_values(
                             by=['publication_year', 'publication_date'], 
@@ -3267,12 +3336,19 @@ def generate_pdf_report(works_by_topic: Dict[str, List[Dict]], level1_term: str,
     
     # Collect and sort by FWCI
     fwci_papers = []
+    seen_fwci = set()
+    
     for topic, works in works_by_topic.items():
         for work in works:
             enriched = enrich_work_data(work)
             if enriched.get('fwci') is not None and enriched.get('fwci') > 0:
-                enriched['topic'] = topic
-                fwci_papers.append(enriched)
+                # Create unique identifier
+                paper_id = enriched.get('doi', enriched.get('id', enriched.get('title', '')))
+                
+                if paper_id not in seen_fwci:
+                    enriched['topic'] = topic
+                    fwci_papers.append(enriched)
+                    seen_fwci.add(paper_id)
     
     if fwci_papers:
         fwci_papers.sort(key=lambda x: x.get('fwci', 0), reverse=True)
@@ -4232,6 +4308,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
