@@ -2999,10 +2999,14 @@ def export_to_excel(works_by_topic: Dict[str, List[Dict]], highly_cited_papers: 
             if df is not None and not df.empty:
                 for col_num, col_name in enumerate(df.columns):
                     worksheet.write(0, col_num, col_name, header_format)
-                    max_len = max(
-                        df[col_name].astype(str).map(len).max() if not df[col_name].empty else 0,
-                        len(str(col_name))
-                    ) + 2
+                    try:
+                        # Convert to string safely, handling None/NaN values
+                        str_lengths = df[col_name].fillna('').astype(str).map(len)
+                        max_data_len = str_lengths.max() if not df[col_name].empty and len(str_lengths) > 0 else 0
+                    except Exception:
+                        max_data_len = 0
+                    
+                    max_len = max(max_data_len, len(str(col_name))) + 2
                     worksheet.set_column(col_num, col_num, min(max_len, 50))
     
     return output.getvalue()
