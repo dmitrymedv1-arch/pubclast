@@ -89,7 +89,7 @@ GRADIENT_PALETTES = {
 
 st.set_page_config(
     page_title="Publication Clustering",
-    page_icon="📊",
+    page_icon="logo1.png",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
