@@ -3565,8 +3565,20 @@ def generate_pdf_report(works_by_topic: Dict[str, List[Dict]], level1_term: str,
 def main():
     """Main application function"""
     
-    # Header
-    st.markdown(f'<h1 class="main-header">Publication Clustering</h1>', unsafe_allow_html=True)
+    # Header with logo
+    from PIL import Image
+    import os
+    
+    if os.path.exists("logo.png"):
+        # Display logo
+        logo = Image.open("logo.png")
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            st.image(logo, use_container_width=True)
+    else:
+        # Fallback to text if logo not found
+        st.markdown(f'<h1 class="main-header">Publication Clustering</h1>', unsafe_allow_html=True)
+    
     st.markdown(f"""
     <p style="font-size: 1rem; color: {ui_colors['text']}; margin-bottom: 1.5rem;">
     Multi-level literature search with topic clustering and advanced bibliometric analysis
