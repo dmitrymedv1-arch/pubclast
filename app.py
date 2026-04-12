@@ -3572,7 +3572,7 @@ def main():
     if os.path.exists("logo.png"):
         # Display logo
         logo = Image.open("logo.png")
-        col1, col2, col3 = st.columns([1, 2, 1])
+        col1, col2, col3 = st.columns([1, 2, 10])
         with col2:
             st.image(logo, use_container_width=True)
     else:
