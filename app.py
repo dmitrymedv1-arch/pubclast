@@ -679,7 +679,8 @@ def build_search_filter(level1_term: str, level2_term: Optional[str] = None,
     """Build filters for OpenAlex API based on first two levels"""
     filters = {}
     
-    # Build search query for title and abstract
+    # OpenAlex API требует специального синтаксиса для текстового поиска
+    # Используем title_and_abstract.search с правильным экранированием
     search_parts = []
     
     # Level 1 - main term
@@ -692,9 +693,11 @@ def build_search_filter(level1_term: str, level2_term: Optional[str] = None,
         parsed = parse_query_terms(level2_term)
         search_parts.append(parsed)
     
-    # Combine all parts with AND - используем правильный параметр OpenAlex
+    # Combine all parts with AND
     if search_parts:
-        filters['title_and_abstract.search'] = ' AND '.join(search_parts)
+        # Важно: не добавляем лишних скобок, OpenAlex сам обработает
+        search_query = ' AND '.join(search_parts)
+        filters['title_and_abstract.search'] = search_query
     
     # Year filter
     if years:
@@ -728,15 +731,19 @@ def build_level3_filter(level3_term: str, base_filters: Dict[str, str]) -> str:
     return ','.join(filter_parts)
 
 def build_count_filter(base_filters: Dict[str, str]) -> str:
-    """Build filter only from first two levels"""
+    """Build filter string for OpenAlex API"""
     filter_parts = []
     
+    # Publication year
     if 'publication_year' in base_filters:
         filter_parts.append(f"publication_year:{base_filters['publication_year']}")
     
-    # ИСПРАВЛЕНО: используем title_and_abstract.search вместо default.search
+    # Text search - важно: не экранируем кавычки, OpenAlex сам разберет
     if 'title_and_abstract.search' in base_filters:
-        filter_parts.append(f"title_and_abstract.search:{base_filters['title_and_abstract.search']}")
+        search_value = base_filters['title_and_abstract.search']
+        # Убираем лишние кавычки, если они есть
+        search_value = search_value.strip('"')
+        filter_parts.append(f"title_and_abstract.search:{search_value}")
     
     return ','.join(filter_parts)
 
@@ -790,38 +797,109 @@ def get_total_count(level1_term: str, level2_term: Optional[str] = None,
     filters = build_search_filter(level1_term, level2_term, years=years)
     filter_str = build_count_filter(filters)
     
+    print(f"DEBUG: filter_str = '{filter_str}'")
+    
     if not filter_str:
         return 0
     
+    # Пробуем прямой запрос через requests для отладки
+    url = f"{OPENALEX_BASE_URL}/works"
     params = {
         'filter': filter_str,
         'per-page': 1
     }
     
-    data = make_openalex_request(f"{OPENALEX_BASE_URL}/works", params)
+    print(f"DEBUG: URL = {url}")
+    print(f"DEBUG: params = {params}")
     
-    if data and 'meta' in data:
-        return data['meta'].get('count', 0)
-    
-    return 0
+    try:
+        # Делаем прямой запрос без обертки для отладки
+        response = requests.get(
+            url,
+            params=params,
+            headers={'User-Agent': f'Publication-Clustering (mailto:{MAILTO})'},
+            timeout=30
+        )
+        
+        print(f"DEBUG: HTTP Status = {response.status_code}")
+        
+        if response.status_code == 200:
+            data = response.json()
+            count = data.get('meta', {}).get('count', 0)
+            print(f"DEBUG: count = {count}")
+            return count
+        else:
+            print(f"DEBUG: Error response = {response.text[:200]}")
+            return 0
+            
+    except Exception as e:
+        print(f"DEBUG: Exception = {str(e)}")
+        return 0
 
 def test_query(level1_term: str, level2_term: Optional[str] = None, years: Optional[List[int]] = None):
     """Test query and show how it will be sent to OpenAlex"""
-    filters = build_search_filter(level1_term, level2_term, years)
-    filter_str = build_count_filter(filters)
+    
+    # Строим фильтр вручную для наглядности
+    search_parts = []
+    if level1_term:
+        search_parts.append(level1_term)
+    if level2_term:
+        search_parts.append(level2_term)
+    
+    search_query = ' AND '.join(search_parts) if search_parts else ''
+    
+    # Формируем filter string вручную
+    filter_parts = []
+    if search_query:
+        filter_parts.append(f"title_and_abstract.search:{search_query}")
+    if years:
+        if len(years) == 1:
+            filter_parts.append(f"publication_year:{years[0]}")
+        else:
+            filter_parts.append(f"publication_year:{min(years)}-{max(years)}")
+    
+    filter_str = ','.join(filter_parts)
     
     st.write("**Debug Information:**")
     st.write(f"Original Level 1: {level1_term}")
-    st.write(f"Parsed Level 1: {parse_query_terms(level1_term)}")
-    if level2_term:
-        st.write(f"Original Level 2: {level2_term}")
-        st.write(f"Parsed Level 2: {parse_query_terms(level2_term)}")
+    st.write(f"Original Level 2: {level2_term if level2_term else '(none)'}")
+    st.write(f"Search query: {search_query}")
     st.write(f"Filter string: {filter_str}")
-    st.write(f"Full URL: https://api.openalex.org/works?filter={filter_str}&per-page=1")
     
-    # Test request
+    # Формируем полный URL
+    full_url = f"https://api.openalex.org/works?filter={filter_str}&per-page=1"
+    st.write(f"**Full URL:** `{full_url}`")
+    
+    # Пробуем выполнить запрос
+    try:
+        response = requests.get(
+            full_url,
+            headers={'User-Agent': f'Publication-Clustering (mailto:{MAILTO})'},
+            timeout=30
+        )
+        
+        st.write(f"**HTTP Status:** {response.status_code}")
+        
+        if response.status_code == 200:
+            data = response.json()
+            count = data.get('meta', {}).get('count', 0)
+            st.success(f"✅ **Found {count:,} papers!**")
+            
+            # Показываем пример первого результата
+            if data.get('results') and len(data['results']) > 0:
+                first = data['results'][0]
+                st.write(f"**Example result:** {first.get('title', 'N/A')[:100]}...")
+        else:
+            st.error(f"❌ Error: {response.status_code}")
+            st.code(response.text[:500])
+            
+    except Exception as e:
+        st.error(f"❌ Request failed: {str(e)}")
+    
+    # Также пробуем через вашу функцию
     count = get_total_count(level1_term, level2_term, years)
-    st.write(f"**Result count: {count:,}**")
+    st.write(f"**Via get_total_count: {count:,}**")
+    
     return count
 
 def get_topic_counts(level1_term: str, level2_term: Optional[str],
