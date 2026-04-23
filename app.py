@@ -756,33 +756,15 @@ def make_openalex_request(url: str, params: Optional[Dict] = None) -> Optional[D
     if params is None:
         params = {}
     
-    # ДИАГНОСТИКА: печатаем URL перед отправкой
-    from urllib.parse import urlencode
-    
-    # Копируем params для диагностики
-    test_params = params.copy()
-    test_params['mailto'] = MAILTO
-    
-    full_url = f"{url}?{urlencode(test_params)}"
-    print(f"\n=== DEBUG REQUEST ===")
-    print(f"URL: {url}")
-    print(f"Params: {params}")
-    print(f"Full URL (first 300 chars): {full_url[:300]}")
-    print(f"===================\n")
+    params['mailto'] = MAILTO
     
     try:
         response = requests.get(
             url,
-            params=test_params,  # Используем params с mailto
+            params=params,
             headers=POLITE_POOL_HEADER,
             timeout=30
         )
-        
-        # ДИАГНОСТИКА: печатаем ответ
-        print(f"\n=== DEBUG RESPONSE ===")
-        print(f"Status code: {response.status_code}")
-        print(f"Response text (first 500 chars): {response.text[:500]}")
-        print(f"====================\n")
         
         if response.status_code == 200:
             return response.json()
@@ -793,17 +775,13 @@ def make_openalex_request(url: str, params: Optional[Dict] = None) -> Optional[D
             raise requests.exceptions.RequestException("Rate limited")
         else:
             logger.error(f"Error {response.status_code}: {response.text[:200]}")
-            # Показываем ошибку в Streamlit
-            st.error(f"OpenAlex API Error {response.status_code}: {response.text[:200]}")
             return None
             
     except requests.exceptions.Timeout:
-        logger.warning(f"Request timeout: {url}")
-        st.error(f"Request timeout after 30 seconds")
+        logger.warning("Request timeout")
         raise
     except Exception as e:
         logger.error(f"Request error: {str(e)}")
-        st.error(f"Request error: {str(e)}")
         raise
 
 def get_total_count(level1_term: str, level2_term: Optional[str] = None,
@@ -4346,5 +4324,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
