@@ -756,8 +756,6 @@ def make_openalex_request(url: str, params: Optional[Dict] = None) -> Optional[D
     if params is None:
         params = {}
     
-    params['mailto'] = MAILTO
-    
     try:
         response = requests.get(
             url,
