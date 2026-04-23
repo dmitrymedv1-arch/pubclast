@@ -679,7 +679,7 @@ def build_search_filter(level1_term: str, level2_term: Optional[str] = None,
     """Build filters for OpenAlex API based on first two levels"""
     filters = {}
     
-    # Build search query
+    # Build search query for title and abstract
     search_parts = []
     
     # Level 1 - main term
@@ -692,17 +692,15 @@ def build_search_filter(level1_term: str, level2_term: Optional[str] = None,
         parsed = parse_query_terms(level2_term)
         search_parts.append(parsed)
     
-    # Combine all parts with AND
+    # Combine all parts with AND - используем правильный параметр OpenAlex
     if search_parts:
-        # Use default.search instead of title_and_abstract.search for better results
-        filters['default.search'] = ' AND '.join(search_parts)
+        filters['title_and_abstract.search'] = ' AND '.join(search_parts)
     
     # Year filter
     if years:
         if len(years) == 1:
             filters['publication_year'] = str(years[0])
         else:
-            # For range use format from:to
             filters['publication_year'] = f"{min(years)}-{max(years)}"
     
     return filters
@@ -716,15 +714,16 @@ def build_level3_filter(level3_term: str, base_filters: Dict[str, str]) -> str:
     
     # Collect search parts
     search_parts = []
-    if 'default.search' in base_filters:
-        search_parts.append(f"({base_filters['default.search']})")
+    # ИСПРАВЛЕНО: используем title_and_abstract.search вместо default.search
+    if 'title_and_abstract.search' in base_filters:
+        search_parts.append(f"({base_filters['title_and_abstract.search']})")
     
     if level3_term:
         parsed = parse_query_terms(level3_term)
         search_parts.append(f"({parsed})")
     
     if search_parts:
-        filter_parts.append(f"default.search:{' AND '.join(search_parts)}")
+        filter_parts.append(f"title_and_abstract.search:{' AND '.join(search_parts)}")
     
     return ','.join(filter_parts)
 
@@ -735,8 +734,9 @@ def build_count_filter(base_filters: Dict[str, str]) -> str:
     if 'publication_year' in base_filters:
         filter_parts.append(f"publication_year:{base_filters['publication_year']}")
     
-    if 'default.search' in base_filters:
-        filter_parts.append(f"default.search:{base_filters['default.search']}")
+    # ИСПРАВЛЕНО: используем title_and_abstract.search вместо default.search
+    if 'title_and_abstract.search' in base_filters:
+        filter_parts.append(f"title_and_abstract.search:{base_filters['title_and_abstract.search']}")
     
     return ','.join(filter_parts)
 
@@ -948,13 +948,32 @@ def get_yearly_distribution_group_by(level1_term: str, level2_term: Optional[str
     This ensures perfect consistency between total count and yearly sum
     """
     base_filters = build_search_filter(level1_term, level2_term)
-    filter_str = build_level3_filter(level3_term, base_filters)
+    
+    # Строим правильный фильтр
+    search_parts = []
+    if base_filters.get('title_and_abstract.search'):
+        search_parts.append(f"({base_filters['title_and_abstract.search']})")
+    
+    if level3_term:
+        parsed = parse_query_terms(level3_term)
+        search_parts.append(f"({parsed})")
+    
+    filter_parts = []
+    if 'publication_year' in base_filters:
+        filter_parts.append(f"publication_year:{base_filters['publication_year']}")
+    
+    if search_parts:
+        filter_parts.append(f"title_and_abstract.search:{' AND '.join(search_parts)}")
+    
+    filter_str = ','.join(filter_parts)
     
     params = {
         'filter': filter_str,
         'group-by': 'publication_year',
         'per-page': 200
     }
+    
+    print(f"DEBUG yearly_dist - filter: {filter_str}")
     
     data = make_openalex_request(f"{OPENALEX_BASE_URL}/works", params)
     
@@ -984,6 +1003,18 @@ def get_citation_distribution_group_by(level1_term: str, level2_term: Optional[s
     """
     base_filters = build_search_filter(level1_term, level2_term)
     
+    # Строим базовый поисковый запрос
+    search_parts = []
+    if base_filters.get('title_and_abstract.search'):
+        search_parts.append(f"({base_filters['title_and_abstract.search']})")
+    
+    if level3_term:
+        parsed = parse_query_terms(level3_term)
+        search_parts.append(f"({parsed})")
+    
+    base_search_str = f"title_and_abstract.search:{' AND '.join(search_parts)}" if search_parts else ""
+    year_str = f"publication_year:{base_filters['publication_year']}" if 'publication_year' in base_filters else ""
+    
     # Define citation ranges - UPDATED TO 7 CATEGORIES
     citation_ranges = {
         '0': 'cited_by_count:0',
@@ -998,25 +1029,21 @@ def get_citation_distribution_group_by(level1_term: str, level2_term: Optional[s
     distribution = {}
     
     for range_name, range_filter in citation_ranges.items():
-        # Combine base filter with citation range filter
-        combined_filter = f"{range_filter}"
-        if base_filters:
-            filter_parts = []
-            if 'publication_year' in base_filters:
-                filter_parts.append(f"publication_year:{base_filters['publication_year']}")
-            if 'default.search' in base_filters:
-                filter_parts.append(f"default.search:{base_filters['default.search']}")
-            if level3_term:
-                parsed = parse_query_terms(level3_term)
-                filter_parts.append(f"default.search:({parsed})")
-            
-            if filter_parts:
-                combined_filter = f"{range_filter},{','.join(filter_parts)}"
+        # Combine filters
+        filter_parts = [range_filter]
+        if year_str:
+            filter_parts.append(year_str)
+        if base_search_str:
+            filter_parts.append(base_search_str)
+        
+        combined_filter = ','.join(filter_parts)
         
         params = {
             'filter': combined_filter,
             'per-page': 1
         }
+        
+        print(f"DEBUG citation_dist - {range_name}: {combined_filter}")
         
         data = make_openalex_request(f"{OPENALEX_BASE_URL}/works", params)
         
