@@ -676,7 +676,7 @@ def navigation_buttons(show_back: bool = True, show_new: bool = True):
 
 def build_search_filter(level1_term: str, level2_term: Optional[str] = None,
                        years: Optional[List[int]] = None) -> Dict[str, str]:
-    """Build filters for OpenAlex API based on first two levels with inverted abstract support"""
+    """Build filters for OpenAlex API based on first two levels"""
     filters = {}
     
     # Build search query
@@ -694,14 +694,8 @@ def build_search_filter(level1_term: str, level2_term: Optional[str] = None,
     
     # Combine all parts with AND
     if search_parts:
-        # Create main query string
-        main_query = ' AND '.join(search_parts)
-        
-        # Enhanced search with inverted abstract support
-        # Search in title+abstract OR in inverted_abstract
-        # This ensures we catch papers where terms appear in either location
-        enhanced_query = f"({main_query}) OR (inverted_abstract:{main_query})"
-        filters['default.search'] = enhanced_query
+        # Use default.search instead of title_and_abstract.search for better results
+        filters['default.search'] = ' AND '.join(search_parts)
     
     # Year filter
     if years:
@@ -713,470 +707,35 @@ def build_search_filter(level1_term: str, level2_term: Optional[str] = None,
     
     return filters
 
-
 def build_level3_filter(level3_term: str, base_filters: Dict[str, str]) -> str:
-    """Build filter for level 3 term including all filters with inverted abstract support"""
+    """Build filter for level 3 term including all filters"""
     filter_parts = []
     
     if 'publication_year' in base_filters:
         filter_parts.append(f"publication_year:{base_filters['publication_year']}")
     
-    # Collect search parts from base_filters
+    # Collect search parts
     search_parts = []
     if 'default.search' in base_filters:
-        # Extract the main query from enhanced filter (remove the inverted_abstract part if needed)
-        # But easier: just use the original search terms we would have built
-        # We'll reconstruct from level3_term and base_filters context
-        pass
+        search_parts.append(f"({base_filters['default.search']})")
     
-    # Build enhanced query with inverted abstract support for level 3 term
     if level3_term:
         parsed = parse_query_terms(level3_term)
-        # Search in title+abstract OR in inverted_abstract
-        enhanced_query = f"({parsed}) OR (inverted_abstract:{parsed})"
-        search_parts.append(enhanced_query)
+        search_parts.append(f"({parsed})")
     
-    # Also include base search from level1+level2 if present in base_filters
-    # We need to extract it from the stored value or re-build
-    # Since base_filters['default.search'] contains the enhanced query, we can use it as is
-    if 'default.search' in base_filters:
-        # The base_filters contains the combined level1+level2 query
-        # We need to ensure level3 is combined with AND
-        base_query = base_filters['default.search']
-        if search_parts:
-            # Combine base query with level3 using AND
-            combined_query = f"({base_query}) AND ({' AND '.join(search_parts)})"
-            filter_parts.append(f"default.search:{combined_query}")
-        else:
-            filter_parts.append(f"default.search:{base_query}")
-    elif search_parts:
-        # Only level3 terms
+    if search_parts:
         filter_parts.append(f"default.search:{' AND '.join(search_parts)}")
     
     return ','.join(filter_parts)
 
-
 def build_count_filter(base_filters: Dict[str, str]) -> str:
-    """Build filter only from first two levels with inverted abstract support"""
+    """Build filter only from first two levels"""
     filter_parts = []
     
     if 'publication_year' in base_filters:
         filter_parts.append(f"publication_year:{base_filters['publication_year']}")
     
     if 'default.search' in base_filters:
-        # Use the enhanced query as is (already includes inverted_abstract)
-        filter_parts.append(f"default.search:{base_filters['default.search']}")
-    
-    return ','.join(filter_parts)
-
-
-def get_yearly_distribution_group_by(level1_term: str, level2_term: Optional[str], 
-                                    level3_term: str, years: List[int]) -> Dict[int, int]:
-    """
-    Get yearly distribution for a specific sub-topic using group_by (single request)
-    This ensures perfect consistency between total count and yearly sum
-    WITH INVERTED ABSTRACT SUPPORT
-    """
-    # Build search query with inverted abstract
-    search_parts = []
-    
-    if level1_term:
-        parsed = parse_query_terms(level1_term)
-        search_parts.append(parsed)
-    
-    if level2_term:
-        parsed = parse_query_terms(level2_term)
-        search_parts.append(parsed)
-    
-    if level3_term:
-        parsed = parse_query_terms(level3_term)
-        search_parts.append(parsed)
-    
-    # Build enhanced query with inverted abstract
-    if search_parts:
-        main_query = ' AND '.join(search_parts)
-        enhanced_query = f"({main_query}) OR (inverted_abstract:{main_query})"
-        filter_str = f"default.search:{enhanced_query}"
-    else:
-        filter_str = ""
-    
-    # Add year filter
-    if years:
-        year_filter = f"publication_year:{min(years)}-{max(years)}"
-        if filter_str:
-            filter_str = f"{filter_str},{year_filter}"
-        else:
-            filter_str = year_filter
-    
-    params = {
-        'filter': filter_str,
-        'group-by': 'publication_year',
-        'per-page': 200
-    }
-    
-    data = make_openalex_request(f"{OPENALEX_BASE_URL}/works", params)
-    
-    # Initialize all years with 0
-    yearly_counts = {year: 0 for year in years}
-    
-    if data and 'group_by' in data:
-        for group in data['group_by']:
-            try:
-                year = int(group['key'])
-                if year in years:
-                    yearly_counts[year] = group['count']
-            except (ValueError, TypeError):
-                continue
-    
-    return yearly_counts
-
-
-def get_citation_distribution_group_by(level1_term: str, level2_term: Optional[str],
-                                      level3_term: str, years: List[int]) -> Dict[str, int]:
-    """
-    Get citation distribution using group_by with filters for citation ranges.
-    Makes 7 separate API requests to get exact counts for each citation category.
-    WITH INVERTED ABSTRACT SUPPORT
-    """
-    # Build base search query with inverted abstract
-    search_parts = []
-    
-    if level1_term:
-        parsed = parse_query_terms(level1_term)
-        search_parts.append(parsed)
-    
-    if level2_term:
-        parsed = parse_query_terms(level2_term)
-        search_parts.append(parsed)
-    
-    if level3_term:
-        parsed = parse_query_terms(level3_term)
-        search_parts.append(parsed)
-    
-    # Define citation ranges - UPDATED TO 7 CATEGORIES
-    citation_ranges = {
-        '0': 'cited_by_count:0',
-        '1-4': 'cited_by_count:1-4',
-        '5-10': 'cited_by_count:5-10',
-        '11-30': 'cited_by_count:11-30',
-        '31-50': 'cited_by_count:31-50',
-        '51-100': 'cited_by_count:51-100',
-        '100+': 'cited_by_count:>100'
-    }
-    
-    distribution = {}
-    
-    for range_name, range_filter in citation_ranges.items():
-        # Build enhanced query with inverted abstract
-        if search_parts:
-            main_query = ' AND '.join(search_parts)
-            enhanced_query = f"({main_query}) OR (inverted_abstract:{main_query})"
-            search_filter = f"default.search:{enhanced_query}"
-        else:
-            search_filter = ""
-        
-        # Combine base filter with citation range filter
-        combined_filter = range_filter
-        
-        if search_filter:
-            combined_filter = f"{range_filter},{search_filter}"
-        
-        # Add year filter
-        if years:
-            year_filter = f"publication_year:{min(years)}-{max(years)}"
-            combined_filter = f"{combined_filter},{year_filter}"
-        
-        params = {
-            'filter': combined_filter,
-            'per-page': 1
-        }
-        
-        data = make_openalex_request(f"{OPENALEX_BASE_URL}/works", params)
-        
-        if data and 'meta' in data:
-            distribution[range_name] = data['meta'].get('count', 0)
-        else:
-            distribution[range_name] = 0
-        
-        time.sleep(0.1)  # Small delay to be polite to API
-    
-    return distribution
-
-
-def get_total_count(level1_term: str, level2_term: Optional[str] = None,
-                   years: Optional[List[int]] = None) -> int:
-    """Get total count of papers matching query WITH INVERTED ABSTRACT SUPPORT"""
-    # Build search query with inverted abstract
-    search_parts = []
-    
-    if level1_term:
-        parsed = parse_query_terms(level1_term)
-        search_parts.append(parsed)
-    
-    if level2_term:
-        parsed = parse_query_terms(level2_term)
-        search_parts.append(parsed)
-    
-    if search_parts:
-        main_query = ' AND '.join(search_parts)
-        enhanced_query = f"({main_query}) OR (inverted_abstract:{main_query})"
-        filter_str = f"default.search:{enhanced_query}"
-    else:
-        filter_str = ""
-    
-    # Add year filter
-    if years:
-        if len(years) == 1:
-            year_filter = f"publication_year:{years[0]}"
-        else:
-            year_filter = f"publication_year:{min(years)}-{max(years)}"
-        
-        if filter_str:
-            filter_str = f"{filter_str},{year_filter}"
-        else:
-            filter_str = year_filter
-    
-    if not filter_str:
-        return 0
-    
-    params = {
-        'filter': filter_str,
-        'per-page': 1
-    }
-    
-    data = make_openalex_request(f"{OPENALEX_BASE_URL}/works", params)
-    
-    if data and 'meta' in data:
-        return data['meta'].get('count', 0)
-    
-    return 0
-
-
-def test_query(level1_term: str, level2_term: Optional[str] = None, years: Optional[List[int]] = None):
-    """Test query and show how it will be sent to OpenAlex WITH INVERTED ABSTRACT"""
-    filters = build_search_filter(level1_term, level2_term, years)
-    filter_str = build_count_filter(filters)
-    
-    st.write("**Debug Information:**")
-    st.write(f"Original Level 1: {level1_term}")
-    st.write(f"Parsed Level 1: {parse_query_terms(level1_term)}")
-    if level2_term:
-        st.write(f"Original Level 2: {level2_term}")
-        st.write(f"Parsed Level 2: {parse_query_terms(level2_term)}")
-    st.write(f"Enhanced Filter string (with inverted abstract): {filter_str}")
-    
-    # Build enhanced query for display
-    search_parts = []
-    if level1_term:
-        search_parts.append(parse_query_terms(level1_term))
-    if level2_term:
-        search_parts.append(parse_query_terms(level2_term))
-    
-    if search_parts:
-        main_query = ' AND '.join(search_parts)
-        enhanced_query = f"({main_query}) OR (inverted_abstract:{main_query})"
-        st.write(f"Enhanced search query: {enhanced_query}")
-    
-    st.write(f"Full URL: https://api.openalex.org/works?filter={filter_str}&per-page=1")
-    st.write("**Note:** Search now includes BOTH title/abstract AND inverted abstract fields for better recall.")
-    
-    # Test request
-    count = get_total_count(level1_term, level2_term, years)
-    st.write(f"**Result count: {count:,}**")
-    return count
-
-
-def get_topic_counts(level1_term: str, level2_term: Optional[str],
-                    level3_terms: List[str], years: Optional[List[int]],
-                    progress_callback=None) -> Dict[str, int]:
-    """Get paper counts for each level 3 term WITH INVERTED ABSTRACT SUPPORT"""
-    counts = {}
-    
-    for i, term in enumerate(level3_terms):
-        if progress_callback:
-            progress_callback(i / len(level3_terms), f"Analyzing: {term}")
-        
-        # Build search query with inverted abstract
-        search_parts = []
-        
-        if level1_term:
-            parsed = parse_query_terms(level1_term)
-            search_parts.append(parsed)
-        
-        if level2_term:
-            parsed = parse_query_terms(level2_term)
-            search_parts.append(parsed)
-        
-        if term:
-            parsed = parse_query_terms(term)
-            search_parts.append(parsed)
-        
-        if search_parts:
-            main_query = ' AND '.join(search_parts)
-            enhanced_query = f"({main_query}) OR (inverted_abstract:{main_query})"
-            filter_str = f"default.search:{enhanced_query}"
-        else:
-            filter_str = ""
-        
-        # Add year filter
-        if years:
-            if len(years) == 1:
-                year_filter = f"publication_year:{years[0]}"
-            else:
-                year_filter = f"publication_year:{min(years)}-{max(years)}"
-            
-            if filter_str:
-                filter_str = f"{filter_str},{year_filter}"
-            else:
-                filter_str = year_filter
-        
-        if not filter_str:
-            counts[term] = 0
-            continue
-        
-        params = {
-            'filter': filter_str,
-            'per-page': 1
-        }
-        
-        data = make_openalex_request(f"{OPENALEX_BASE_URL}/works", params)
-        
-        if data and 'meta' in data:
-            counts[term] = data['meta'].get('count', 0)
-        else:
-            counts[term] = 0
-        
-        time.sleep(0.2)
-    
-    return counts
-
-
-def fetch_top_works(level1_term: str, level2_term: Optional[str],
-                   level3_term: str, years: Optional[List[int]],
-                   limit: int = 100, progress_callback=None) -> List[Dict]:
-    """Fetch top N most relevant works for a term WITH INVERTED ABSTRACT SUPPORT"""
-    # Build search query with inverted abstract
-    search_parts = []
-    
-    if level1_term:
-        parsed = parse_query_terms(level1_term)
-        search_parts.append(parsed)
-    
-    if level2_term:
-        parsed = parse_query_terms(level2_term)
-        search_parts.append(parsed)
-    
-    if level3_term:
-        parsed = parse_query_terms(level3_term)
-        search_parts.append(parsed)
-    
-    if search_parts:
-        main_query = ' AND '.join(search_parts)
-        enhanced_query = f"({main_query}) OR (inverted_abstract:{main_query})"
-        filter_str = f"default.search:{enhanced_query}"
-    else:
-        filter_str = ""
-    
-    # Add year filter
-    if years:
-        if len(years) == 1:
-            year_filter = f"publication_year:{years[0]}"
-        else:
-            year_filter = f"publication_year:{min(years)}-{max(years)}"
-        
-        if filter_str:
-            filter_str = f"{filter_str},{year_filter}"
-        else:
-            filter_str = year_filter
-    
-    if not filter_str:
-        return []
-    
-    all_works = []
-    cursor = "*"
-    page = 0
-    
-    while len(all_works) < limit and cursor:
-        page += 1
-        if progress_callback:
-            progress_callback(
-                min(len(all_works) / limit, 0.99),
-                f"Fetching {level3_term}: page {page}"
-            )
-        
-        params = {
-            'filter': filter_str,
-            'per-page': min(CURSOR_PAGE_SIZE, limit - len(all_works)),
-            'cursor': cursor,
-            'sort': 'relevance_score:desc'
-        }
-        
-        data = make_openalex_request(f"{OPENALEX_BASE_URL}/works", params)
-        
-        if not data or 'results' not in data:
-            break
-        
-        works = data['results']
-        if not works:
-            break
-        
-        all_works.extend(works)
-        cursor = data.get('meta', {}).get('next_cursor')
-        time.sleep(0.1)
-    
-    return all_works[:limit]
-
-def build_level3_filter(level3_term: str, base_filters: Dict[str, str]) -> str:
-    """Build filter for level 3 term including all filters with inverted abstract support"""
-    filter_parts = []
-    
-    if 'publication_year' in base_filters:
-        filter_parts.append(f"publication_year:{base_filters['publication_year']}")
-    
-    # Collect search parts from base_filters
-    search_parts = []
-    if 'default.search' in base_filters:
-        # Extract the main query from enhanced filter (remove the inverted_abstract part if needed)
-        # But easier: just use the original search terms we would have built
-        # We'll reconstruct from level3_term and base_filters context
-        pass
-    
-    # Build enhanced query with inverted abstract support for level 3 term
-    if level3_term:
-        parsed = parse_query_terms(level3_term)
-        # Search in title+abstract OR in inverted_abstract
-        enhanced_query = f"({parsed}) OR (inverted_abstract:{parsed})"
-        search_parts.append(enhanced_query)
-    
-    # Also include base search from level1+level2 if present in base_filters
-    # We need to extract it from the stored value or re-build
-    # Since base_filters['default.search'] contains the enhanced query, we can use it as is
-    if 'default.search' in base_filters:
-        # The base_filters contains the combined level1+level2 query
-        # We need to ensure level3 is combined with AND
-        base_query = base_filters['default.search']
-        if search_parts:
-            # Combine base query with level3 using AND
-            combined_query = f"({base_query}) AND ({' AND '.join(search_parts)})"
-            filter_parts.append(f"default.search:{combined_query}")
-        else:
-            filter_parts.append(f"default.search:{base_query}")
-    elif search_parts:
-        # Only level3 terms
-        filter_parts.append(f"default.search:{' AND '.join(search_parts)}")
-    
-    return ','.join(filter_parts)
-
-
-def build_count_filter(base_filters: Dict[str, str]) -> str:
-    """Build filter only from first two levels with inverted abstract support"""
-    filter_parts = []
-    
-    if 'publication_year' in base_filters:
-        filter_parts.append(f"publication_year:{base_filters['publication_year']}")
-    
-    if 'default.search' in base_filters:
-        # Use the enhanced query as is (already includes inverted_abstract)
         filter_parts.append(f"default.search:{base_filters['default.search']}")
     
     return ','.join(filter_parts)
@@ -1387,38 +946,9 @@ def get_yearly_distribution_group_by(level1_term: str, level2_term: Optional[str
     """
     Get yearly distribution for a specific sub-topic using group_by (single request)
     This ensures perfect consistency between total count and yearly sum
-    WITH INVERTED ABSTRACT SUPPORT
     """
-    # Build search query with inverted abstract
-    search_parts = []
-    
-    if level1_term:
-        parsed = parse_query_terms(level1_term)
-        search_parts.append(parsed)
-    
-    if level2_term:
-        parsed = parse_query_terms(level2_term)
-        search_parts.append(parsed)
-    
-    if level3_term:
-        parsed = parse_query_terms(level3_term)
-        search_parts.append(parsed)
-    
-    # Build enhanced query with inverted abstract
-    if search_parts:
-        main_query = ' AND '.join(search_parts)
-        enhanced_query = f"({main_query}) OR (inverted_abstract:{main_query})"
-        filter_str = f"default.search:{enhanced_query}"
-    else:
-        filter_str = ""
-    
-    # Add year filter
-    if years:
-        year_filter = f"publication_year:{min(years)}-{max(years)}"
-        if filter_str:
-            filter_str = f"{filter_str},{year_filter}"
-        else:
-            filter_str = year_filter
+    base_filters = build_search_filter(level1_term, level2_term)
+    filter_str = build_level3_filter(level3_term, base_filters)
     
     params = {
         'filter': filter_str,
@@ -1451,22 +981,8 @@ def get_citation_distribution_group_by(level1_term: str, level2_term: Optional[s
     """
     Get citation distribution using group_by with filters for citation ranges.
     Makes 7 separate API requests to get exact counts for each citation category.
-    WITH INVERTED ABSTRACT SUPPORT
     """
-    # Build base search query with inverted abstract
-    search_parts = []
-    
-    if level1_term:
-        parsed = parse_query_terms(level1_term)
-        search_parts.append(parsed)
-    
-    if level2_term:
-        parsed = parse_query_terms(level2_term)
-        search_parts.append(parsed)
-    
-    if level3_term:
-        parsed = parse_query_terms(level3_term)
-        search_parts.append(parsed)
+    base_filters = build_search_filter(level1_term, level2_term)
     
     # Define citation ranges - UPDATED TO 7 CATEGORIES
     citation_ranges = {
@@ -1482,24 +998,20 @@ def get_citation_distribution_group_by(level1_term: str, level2_term: Optional[s
     distribution = {}
     
     for range_name, range_filter in citation_ranges.items():
-        # Build enhanced query with inverted abstract
-        if search_parts:
-            main_query = ' AND '.join(search_parts)
-            enhanced_query = f"({main_query}) OR (inverted_abstract:{main_query})"
-            search_filter = f"default.search:{enhanced_query}"
-        else:
-            search_filter = ""
-        
         # Combine base filter with citation range filter
-        combined_filter = range_filter
-        
-        if search_filter:
-            combined_filter = f"{range_filter},{search_filter}"
-        
-        # Add year filter
-        if years:
-            year_filter = f"publication_year:{min(years)}-{max(years)}"
-            combined_filter = f"{combined_filter},{year_filter}"
+        combined_filter = f"{range_filter}"
+        if base_filters:
+            filter_parts = []
+            if 'publication_year' in base_filters:
+                filter_parts.append(f"publication_year:{base_filters['publication_year']}")
+            if 'default.search' in base_filters:
+                filter_parts.append(f"default.search:{base_filters['default.search']}")
+            if level3_term:
+                parsed = parse_query_terms(level3_term)
+                filter_parts.append(f"default.search:({parsed})")
+            
+            if filter_parts:
+                combined_filter = f"{range_filter},{','.join(filter_parts)}"
         
         params = {
             'filter': combined_filter,
@@ -4812,6 +4324,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
